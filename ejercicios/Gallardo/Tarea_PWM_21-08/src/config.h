@@ -8,6 +8,9 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
+#include "LPC17xx.h"
+#include <stdio.h>
+
 #define BIT_MASK(x)     (1 << x)
 #define BITS_MASK(x,s)  (((1 << x) - 1) << s)
 
