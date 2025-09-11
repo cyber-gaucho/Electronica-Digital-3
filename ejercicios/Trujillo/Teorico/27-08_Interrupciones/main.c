@@ -18,18 +18,26 @@
 #include "config.h"
 
 // ---------------- VARIABLES GLOBALES ----------------
-volatile uint8_t enable_blink = 1;   // flag para habilitar o no el parpadeo
-volatile uint8_t led_state = 0;      // estado actual del LED
+volatile uint8_t enable_blink = 1;   
+volatile uint8_t led_state = 0;      
 
-// Prototipos de funciones
 void configGPIO(void);
 void configST(void);
 void configPortInt(void);
 void configEINT(void);
 
-void SysTick_Handler(void);
-void EINT2_IRQHandler(void);
-void EINT3_IRQHandler(void);
+// ---------------- MAIN ----------------
+int main(void) {
+    configGPIO();
+    configST();
+    configEINT();
+    configPortInt();
+
+    while (1) {
+        __WFI();  // espera interrupción
+    }
+}
+
 
 // ---------------- CONFIGURACIONES ----------------
 
@@ -99,14 +107,4 @@ void EINT3_IRQHandler(void) {
     }
 }
 
-// ---------------- MAIN ----------------
-int main(void) {
-    configGPIO();
-    configST();
-    configEINT();
-    configPortInt();
 
-    while (1) {
-        __WFI();  // espera interrupción
-    }
-}

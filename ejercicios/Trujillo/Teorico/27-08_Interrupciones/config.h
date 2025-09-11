@@ -21,6 +21,6 @@
 
 #define EINT2_PIN   12      // P2.12
 #define EINT2_MASK  (1 << EINT2_PIN)
-#define EINT2_PINSEL BITS_MASK(2, (EINT2_PIN*2
+#define EINT2_PINSEL BITS_MASK(2, (EINT2_PIN*2))
 
 #endif /* CONFIG_H_ */

@@ -118,7 +118,7 @@ void EINT3_IRQHandler(void) {
     // Chequea cambios en P0.[3:0]
     if (LPC_GPIOINT->IO0IntStatR & 0x0F || LPC_GPIOINT->IO0IntStatF & 0x0F) {
         duty = getDutyCycle();
-        LPC_GPIOINT->IO0IntClr = 0x0F; // limpia flags de P0.0–P0.3
+        LPC_GPIOINT->IO0IntClr = 0x0F; // limpia flags
     }
 }
 
