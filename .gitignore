@@ -53,3 +53,33 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# === Carpetas de IDEs ===
+.vscode/
+.idea/
+.settings/
+.cproject
+.project
+
+# === Carpetas de build/debug ===
+build/
+Debug/
+cmake-build-debug/
+cmake-build-release/
+
+# === Archivos temporales ===
+*.o
+*.obj
+*.exe
+*.out
+*.log
+
+# === Archivos de backup ===
+*~
+*.swp
+
+# === Archivos de librerías compiladas ===
+*.a
+*.so
+*.dll
+
