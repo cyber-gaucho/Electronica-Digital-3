@@ -1,11 +1,25 @@
+/**
+ * @file    25_10_02_DAC-440-2200.c
+ * @brief   Genera una señal de audio de entre 440Hz y 2200Hz
+ *
+ * Utiliza el ADC para leer el voltaje de un potenciometro conectado a P0.23 (ADC0)
+ * El valor del ADC (0-4095) se mapea a una frecuencia entre 440Hz y 2200Hz
+ * Se utiliza el DAC para generar una señal en el pin P0.26
+ * La señal de audio es una onda senoidal almacenada en un array
+ * Se utiliza el Timer0 para generar interrupciones a la frecuencia deseada
+ * En cada interrupción se actualiza el valor del DAC con el siguiente valor de la onda
+ */
+
 #include "E:\Electronica-Digital-3\common\cmsis\CMSISv2p00_LPC17xx\Drivers\inc\lpc17xx_adc.h"
 #include "E:\Electronica-Digital-3\common\cmsis\CMSISv2p00_LPC17xx\Drivers\inc\lpc17xx_dac.h"
 #include "E:\Electronica-Digital-3\common\cmsis\CMSISv2p00_LPC17xx\Drivers\inc\lpc17xx_pinsel.h"
 // #include "E:\Electronica-Digital-3\common\cmsis\CMSISv2p00_LPC17xx\Drivers\inc\lpc17xx_gpio.h"
 #include "E:\Electronica-Digital-3\common\cmsis\CMSISv2p00_LPC17xx\Drivers\inc\lpc17xx_timer.h"
+
 /* ADC sample frequency */
 #define ADC_CONVERSION_RATE 200000
 
+/* Array de valores para un periodo completo de la onda senoidal */
 volatile uint16_t sine_bank[454] = {
  512, 519, 526, 533, 540, 547, 554, 561, 568, 575, 582, 589,
  596, 603, 610, 617, 624, 631, 638, 644, 651, 658, 665, 672,
@@ -44,9 +58,17 @@ volatile uint16_t sine_bank[454] = {
  207, 213, 219, 225, 231, 237, 243, 249, 255, 261, 267, 273,
  280, 286, 292, 299, 305, 312, 318, 325, 331, 338, 345, 351,
  358, 365, 372, 379, 385, 392, 399, 406, 413, 420, 427, 434,
- 441, 448, 455, 462, 469, 476, 483, 490, 497, 504};
+ 441, 448, 455, 462, 469, 476, 483, 490, 497, 504 };
+
+volatile uint32_t sine_index = 0;
+volatile uint32_t update_rate = 1000; // Frecuencia inicial de actualización del DAC
+volatile uint32_t adc_value = 0;
+volatile uint32_t frequency = 440; // Frecuencia inicial en Hz
 
 
+/**
+ * Configura el ADC para leer el valor del potenciometro en P0.23 (ADC0)
+ */
 void configADC(void) {
     PINSEL_CFG_Type PinCfg;
 
@@ -62,9 +84,10 @@ void configADC(void) {
 
     /* ADC Init */
     ADC_Init(LPC_ADC, ADC_CONVERSION_RATE);
-
 }
-
+/**
+ * Configura el DAC para generar la señal en P0.26 (DAC)
+ */
 void configDAC(void) {
     PINSEL_CFG_Type PinCfg;
     /* Configuration for DAC */
