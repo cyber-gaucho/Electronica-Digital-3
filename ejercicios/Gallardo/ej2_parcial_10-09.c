@@ -32,7 +32,7 @@ void SysTick_Handler(void) {
     led_counter++;
     if (led_counter >= (periodo / 2)) { // con periodo/2 replica el comportamiento de la señal
         led_counter = 0;
-        led_state = !led_state;
+        led_state = !led_state;   // toggle estado LED
         if (led_state)
             LED_PORT->FIOSET = (1 << LED_PIN);  // LED ON
         else
@@ -42,7 +42,7 @@ void SysTick_Handler(void) {
 
 void EINT1_IRQHandler(void) {
     uint32_t t_actual = systick_ms;
-    uint32_t delta = t_actual - t_ultimo;
+    uint32_t delta = t_actual - t_ultimo; // peligro primer periodo
     t_ultimo = t_actual;
     
     // Ajustar periodo entre 100 y 1000 ms
@@ -63,9 +63,9 @@ int main(void) {
     LPC_PINCON->PINSEL4 |= (1 << EINT1_PIN*2);  // P2.11 como EINT1
     LPC_SC->EXTMODE |= (1 << 1);       // Flanco
     LPC_SC->EXTPOLAR |= (1 << 1);      // Flanco de subida
-    NVIC_EnableIRQ(EINT1_IRQn);
+    NVIC_EnableIRQ(EINT1_IRQn); 
 
     while (1) {
-        // todo se maneja en interrupciones
+        // todo por interrupciones
     }
 }
