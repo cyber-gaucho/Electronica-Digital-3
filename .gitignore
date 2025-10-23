@@ -83,3 +83,5 @@ cmake-build-release/
 *.so
 *.dll
 
+# === Carpetas de Drivers ===
+common/

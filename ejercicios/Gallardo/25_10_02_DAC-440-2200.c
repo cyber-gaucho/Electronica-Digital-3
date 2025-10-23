@@ -17,6 +17,8 @@
 #include "E:\Electronica-Digital-3\common\cmsis\CMSISv2p00_LPC17xx\Drivers\inc\lpc17xx_pinsel.h"
 #include "E:\Electronica-Digital-3\common\cmsis\CMSISv2p00_LPC17xx\Drivers\inc\lpc17xx_timer.h"
 
+typedef unsigned int       uint32_t;
+
 /* ADC sample frequency */
 #define ADC_CONVERSION_RATE 200000
 #define N_SAMPLES       454
@@ -76,6 +78,8 @@ volatile uint32_t delayTicks = 100;
 
 /**
  * Configura el ADC para leer el valor del potenciometro en P0.23 (ADC0)
+ * 
+ * TODO: Configurar en MAT0 del timer 1 y habilitar interrupciones
  */
 void configADC(void) {
     PINSEL_CFG_Type PinCfg;
@@ -100,10 +104,11 @@ void configADC(void) {
  */
 void configDAC(void) {
     PINSEL_CFG_Type PinCfg;
-    /* Configuration for DAC */
-    PinCfg.Funcnum = 2;
+    PinCfg.Portnum = 0;
     PinCfg.Pinnum = 26;
-    PinCfg.Portnum = PINSEL_PORT_0;
+    PinCfg.Funcnum = 2;
+    PinCfg.Pinmode = 0;
+    PinCfg.OpenDrain = 0;
     PINSEL_ConfigPin(&PinCfg);
     DAC_Init(LPC_DAC);
 }
@@ -188,10 +193,10 @@ void TIMER1_IRQHandler(void) {
     LPC_TIM1->IR = 1;
 
     // Actualizar promedio ADC
-    updateADCAverage();
+    actualizarAdcAvg();
 
     // Calcular nuevo delayTicks según adcAvg
     // Escala lineal: 0 -> 5 µs, 4095 -> 1 µs
-    delayTicks = 500 - ((adcAvg * 400) / 4095);  // 1 tick = 0.01 µs
+    delayTicks = 500 - ((adcAvg / 4096) * 400);  // 1 tick = 0.01 µs
     if(delayTicks < 100) delayTicks = 100;  // 1 µs mínimo por las dudas
 }

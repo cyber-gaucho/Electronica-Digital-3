@@ -68,7 +68,8 @@ void configDAC(void) {
     PinCfg.Pinnum = 26;
     PinCfg.Portnum = 0;
     PINSEL_ConfigPin(&PinCfg);
-    DAC_Init(LPC_DAC);
+
+    DAC_Init(LPC_DAC);  // 
 }
 
 // ---------------- ADC en burst + promedio ----------------
