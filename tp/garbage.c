@@ -122,3 +122,65 @@ int main(void) {
    - USB_CDC_*: inicializa stack USB CDC y provee read/write blocking o no-blocking.
 */
 
+void drawMenu(uint16_t peso) {
+    for(uint8_t i = 0; i<4 ; i++){
+        for (int i = 0; i < 3; i++) {
+            lcd_setCursor(0, i);
+            if (i == cursorIndex) lcd_print(">");
+            else lcd_print(" ");
+            lcd_print(itemNames[i]);
+            lcd_print(itemOptions[i][itemSelection[i]]);
+        }
+        lcd_setCursor(0, 3);
+        sprintf(buffer, "Peso: %d kg", peso);
+        lcd_print("Peso  ");
+        lcd_print(kilos_str);
+        lcd_print(" kg");
+    }
+}
+void drawMenu(uint16_t peso) {
+    int i, j;
+    // Líneas de menú configurables
+    for (i = 0; i < 3; i++) {
+        // Rellenar con espacios
+        for (j = 0; j < sizeof(menu[i]) - 1; j++) {
+            menu[i][j] = ' ';
+        }
+        menu[i][sizeof(menu[i]) - 1] = '\0'; // Null-terminate
+
+        // Cursor
+        menu[i][0] = (i == cursorIndex) ? '>' : ' ';
+
+        // Nombre de la opción
+        for (j = 0; j < xOffSet && itemNames[i][j] != '\0'; j++) {
+            menu[i][1 + j] = itemNames[i][j];
+        }
+
+        // Valor seleccionado
+        const char* opt = itemOptions[i][itemSelection[i]];
+        for (j = 0; j < sizeof(menu[i]) - 8 && opt[j] != '\0'; j++) {
+            menu[i][7 + j] = opt[j];
+        }
+    }
+
+    // Línea de peso
+    for (j = 0; j < sizeof(menu[3]) - 1; j++) {
+        menu[3][j] = ' ';
+    }
+    menu[3][sizeof(menu[3]) - 1] = '\0';
+
+    // Nombre "Peso"
+    for (j = 0; j < xOffSet && itemNames[3][j] != '\0'; j++) {
+        menu[3][1 + j] = itemNames[3][j];
+    }
+
+    // Valor de kilos
+    for (j = 0; j < 3 && kilos_str[j] != '\0'; j++) {
+        menu[3][7 + j] = kilos_str[j];
+    }
+
+    // Sufijo " kg"
+    menu[3][10] = ' ';
+    menu[3][11] = 'k';
+    menu[3][12] = 'g';
+}

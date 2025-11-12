@@ -7,6 +7,8 @@
 #include 	"lpc17xx_i2c.h"
 #include 	"lpc17xx_pinsel.h"
 #include 	"lpc17xx_gpio.h"
+#include    "lpc17xx_timer.h"
+#include    "lpc17xx_adc.h"
 #include    "LiquidCrystal_I2C_LPC.h"
 #include    <stdlib.h>
 #include    <string.h>
@@ -17,7 +19,9 @@
 #define     LCD_WIDTH       20
 #define     LCD_HEIGHT      4
 
-#define 	RED_LED_PIN     22
+#define 	LED_RED_PIN     22  // 0.22
+#define     LED_BLUE_PIN    26  // 3.26
+#define     LED_GREEN_PIN   25  // 3.25
 
 // --- Botones ---
 #define     BTN_PORT        2
@@ -27,16 +31,27 @@
 // #define BTN_LEFT_PIN    3
 // #define BTN_SAVE_PIN    4
 // #define BTN_SEND_PIN    5
+/**
+ * @enum BTN_OPT
+ * @brief Enumeración de pines asociados a botones de control.
+ *
+ * Esta enumeración define los identificadores de los pines utilizados para los botones.
+ * El valor BTN_ID_PIN debe permanecer como el último elemento ya que se usa en un for loop.
+ *
+ * Nota: El pin P2.9 no está disponible en la placa.
+ */
 enum {
     BTN_UP_PIN = 0,
     BTN_DOWN_PIN, 
     BTN_RIGHT_PIN,
     BTN_LEFT_PIN,
     BTN_SAVE_PIN,
-    BTN_SEND_PIN
+    BTN_SEND_PIN,
+    BTN_ID_PIN      // Dejar ID ultimo en este enum
 } BTN_OPT;
 
 volatile int action = 0;
+uint8_t firstID = 0;
 
 // --- Pin analógico ---
 #define LOAD_CELL_PORT  0
@@ -54,16 +69,16 @@ volatile int action = 0;
 volatile uint16_t adcBuffer[BUFFER_SIZE];
 volatile uint32_t adcBufferIndex = 0;
 volatile bool new_sample_flag = false;
-
-
+uint16_t kilos;
+char kilos_str[3];
 // -------- MENU / OPCIONES ----------
 const char headerID[] = "0123456789ABCDE";
 
 const char* itemNames[4] = {
-  "Sexo ",
-  "Color",
-  "Categ",
-  "Peso "
+  "Sexo  ",
+  "Color ",
+  "Categ ",
+  "Peso  "
 };
 const uint8_t xOffSet = 6;  // Ancho de la categoria mas larga
 
@@ -89,51 +104,112 @@ const uint8_t itemOptionsCount[3] = {
 uint8_t itemSelection[3] = {0, 0, 0};
 int cursorIndex = 0;  // 0..3 (el 3 es lectura, no configurable)
 
-void SysTick_Handler(void);
-void GPIO_IRQHandler(void);
-void drawMenu(int peso);
+char menu[4][20];
+char oldLines[4][20];
+
+void drawMenu(uint16_t peso);
+void updateDisplay();
+void updateLine(uint8_t line, const char* text);
+
 void handleAction(void);
 void setupButtons(void);
 void cfgPin(void); // Otros pines como LED
 void cfgI2C0(void);
+/**
+* @brief Configuración del ADC (P0.23)
+*/
+void cfgADC();
+
+void cfgTimer();
+
+void lcd_update_kilos(uint16_t value);
+
+static void delayUs(uint32_t us);
 
 int main(void) {
     SystemInit();
     SysTick_Config(SystemCoreClock / 1000); // 1 ms tick para debounce
         
-	cfgI2C0();        
+	cfgI2C0();
 
 	lcd_init(LCD_I2C_ADDR);      // Inicializa el LCD
 
 	lcd_begin(LCD_I2C_P, LCD_WIDTH, LCD_HEIGHT);
 	lcd_clear();     // Limpia la pantalla
-    lcd_setCursor(0, 0); lcd_print("      Grupo 1");
+    lcd_setCursor(0, 0); lcd_print("   ED3 - Grupo 1");
     lcd_setCursor(0, 1); lcd_print("  Garcia Lautaro M ");
     lcd_setCursor(0, 2); lcd_print(" Renaudo G Valentino");
-    lcd_setCursor(0, 3); lcd_print("    Digital III");
+    lcd_setCursor(0, 3); lcd_print("  Registro ganadero");
 
+    cfgADC();
+    cfgTimer();
+    cfgPin();
     setupButtons();
-
-    int peso = 250;
+    while (!firstID);
     while (1) {
-        drawMenu(peso);
+        drawMenu(kilos);
+        updateDisplay();
         handleAction();
+        delayUs(5000);
     }
 }
+
+static void delayUs(uint32_t us) {
+    uint32_t cycles = (SystemCoreClock / 1000000) * us;
+    for (volatile uint32_t i = 0; i < cycles; i++) {
+        __NOP();
+    }
+}
+
+void cfgPin(void){
+    PINSEL_CFG_Type cfgLED = {0};
+    cfgLED.Funcnum = PINSEL_FUNC_0; // GPIO
+    cfgLED.Pinmode = PINSEL_PINMODE_TRISTATE;
+    cfgLED.OpenDrain = PINSEL_PINMODE_NORMAL;
+    cfgLED.Portnum = 0;
+    cfgLED.Pinnum = LED_RED_PIN;
+    PINSEL_ConfigPin(&cfgLED);
+
+    cfgLED.Portnum = 3;
+    cfgLED.Pinnum = LED_BLUE_PIN;
+    PINSEL_ConfigPin(&cfgLED);
+
+    cfgLED.Portnum = 3;
+    cfgLED.Pinnum = LED_GREEN_PIN;
+    PINSEL_ConfigPin(&cfgLED);
+
+    GPIO_SetDir(0,1<<LED_RED_PIN,1);
+    GPIO_SetDir(3, 1<<LED_BLUE_PIN|1<<LED_GREEN_PIN,1);
+
+    GPIO_SetValue(0, 1<<LED_RED_PIN);
+    GPIO_SetValue(3,1<<LED_BLUE_PIN|1<<LED_GREEN_PIN);
+}
+
 /*=================================================================================*/
 /*==================================== Botones ====================================*/
 /*=================================================================================*/
 
 /**
  * @brief Configura pines e interrupciones para los botones
- * @todo: Actualizar con los pines seleccionados 
  */
 void setupButtons(void) {
-    LPC_GPIO0->FIODIR &= ~((1 << 18) | (1 << 11));
-    LPC_GPIO2->FIODIR &= ~(1 << 13);
+    PINSEL_CFG_Type cfgButtons = {0};
+    cfgButtons.Portnum = BTN_PORT;
+    cfgButtons.Funcnum = PINSEL_FUNC_0; // GPIO
+    cfgButtons.Pinmode = PINSEL_PINMODE_PULLUP;
+    cfgButtons.OpenDrain = PINSEL_PINMODE_NORMAL;
+    for(uint8_t i = 0; i <= BTN_ID_PIN; i++){
+        cfgButtons.Pinnum = i;
+        PINSEL_ConfigPin(&cfgButtons);
+    }
+    LPC_GPIO2->FIODIR &= ~((1 << BTN_UP_PIN) | (1 << BTN_DOWN_PIN) | (1 << BTN_RIGHT_PIN) |
+                       (1 << BTN_LEFT_PIN) | (1 << BTN_SAVE_PIN) | (1 << BTN_SEND_PIN) |
+                       (1 << BTN_ID_PIN));
 
-    LPC_GPIOINT->IO0IntEnF = (1 << 18) | (1 << 11);
-    LPC_GPIOINT->IO2IntEnF = (1 << 13);
+    GPIO_ClearInt(2,0xFFFF);  // Limpia cualquier interrupción previa
+    GPIO_IntCmd(2,((1 << BTN_UP_PIN) | (1 << BTN_DOWN_PIN) | (1 << BTN_RIGHT_PIN) |
+                    (1 << BTN_LEFT_PIN) | (1 << BTN_SAVE_PIN) | (1 << BTN_SEND_PIN) |
+                    (1 << BTN_ID_PIN)),1);
     NVIC_EnableIRQ(EINT3_IRQn);
 }
 /**
@@ -146,23 +222,7 @@ void EINT3_IRQHandler(void) {
     if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_LEFT_PIN)) { action = 4; LPC_GPIOINT->IO2IntClr = (1 << BTN_LEFT_PIN); }
     if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_SAVE_PIN)) { action = 5; LPC_GPIOINT->IO2IntClr = (1 << BTN_SAVE_PIN); }
     if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_SEND_PIN)) { action = 6; LPC_GPIOINT->IO2IntClr = (1 << BTN_SEND_PIN); }
-
-}
-
-/* --- Lógica de menú --- */
-void drawMenu(int peso) {
-    lcd_clear();
-    char buffer[21];
-    for (int i = 0; i < 3; i++) {
-        lcd_setCursor(0, i);
-        if (i == cursorIndex) lcd_print(">");
-        else lcd_print(" ");
-        sprintf(buffer, "%s: %s", itemNames[i], itemOptions[i][itemSelection[i]]);
-        lcd_print(buffer);
-    }
-    lcd_setCursor(0, 3);
-    sprintf(buffer, "Peso: %d kg", peso);
-    lcd_print(buffer);
+    if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_ID_PIN)) { action = 7; firstID = 1; LPC_GPIOINT->IO2IntClr = (1 << BTN_ID_PIN); }
 }
 
 /* --- Acciones --- */
@@ -180,12 +240,73 @@ void handleAction(void) {
         case 2: // DOWN
             if (cursorIndex < 2) cursorIndex++;
             break;
-        case 3: // OK
-            itemSelection[cursorIndex]++;
-            if (itemSelection[cursorIndex] > 2) itemSelection[cursorIndex] = 0;
+        case 3: // RIGHT
+            if(cursorIndex != 3) {
+                itemSelection[cursorIndex]++;
+                if (itemSelection[cursorIndex] > 2) itemSelection[cursorIndex] = 0;
+            }
+            break;
+        case 4: // LEFT
+            if(cursorIndex != 3) {
+                if (itemSelection[cursorIndex] == 0) itemSelection[cursorIndex] = itemOptionsCount[cursorIndex] - 1;
+                else itemSelection[cursorIndex]--;
+            }
+            break;
+        case 5: // SAVE
+            // TODO
+            GPIO_ClearValue(0, 1<<LED_RED_PIN);
+            GPIO_SetValue(3, 1<<LED_BLUE_PIN);
+            GPIO_SetValue(3, 1<<LED_GREEN_PIN);
+            break;
+        case 6: // SEND
+            // TODO
+            GPIO_ClearValue(3, 1<<LED_BLUE_PIN);
+            GPIO_SetValue(0, 1<<LED_RED_PIN);
+            GPIO_SetValue(3, 1<<LED_GREEN_PIN);
+            break;
+        case 7: // ID
+            // TODO
+            GPIO_ClearValue(3, 1<<LED_GREEN_PIN);
+            GPIO_SetValue(3, 1<<LED_BLUE_PIN);
+            GPIO_SetValue(0, 1<<LED_RED_PIN);
             break;
     }
     action = 0;
+}
+
+/*=================================================================================*/
+/*==================================== DISPLAY ====================================*/
+/*=================================================================================*/
+
+/* --- Lógica de menú --- */
+void drawMenu(uint16_t peso) {
+    for(uint8_t i = 0; i<4 ; i++){
+        for (int i = 0; i < 3; i++) {
+            menu[i][0] = "                    ";
+            if (i == cursorIndex) menu[i][0] = ">";
+            else menu[i][0] = " ";
+            menu[i][1] = itemNames[i];
+            menu[i][7] = itemOptions[i][itemSelection[i]];
+        }
+        menu[3][1] = itemNames[i];
+        menu[3][7] = kilos_str;
+        menu[3][10] =" kg";
+    }
+}
+
+void updateDisplay() { 
+  updateLine(0, menu[0]);
+  updateLine(1, menu[1]);
+  updateLine(2, menu[2]);
+  updateLine(3, menu[3]);
+}
+
+void updateLine(uint8_t line, const char* text) {
+  if (strcmp(oldLines[line], text) != 0) {           // Solo actualiza si hay cambio
+    lcd_clearRow(line);
+    lcd_print(text);
+    strcpy(oldLines[line], text);
+  }
 }
 
 /**
@@ -204,4 +325,107 @@ void cfgI2C0(){
 
 	/* Enable Slave I2C operation */
 	I2C_Cmd(LCD_I2C_P, ENABLE);
+}
+
+/*=================================================================================*/
+/*====================================== ADC ======================================*/
+/*=================================================================================*/
+
+/*********************************************************************//**
+ * @brief        Configura el ADC en el pin P0.23 para modo normal y habilita
+ *               la interrupción en el canal 0.
+ * @details      Inicializa el pin como entrada analógica, configura el ADC
+ *               a 200 kHz, desactiva burst, selecciona disparo por flanco
+ *               descendente, habilita el canal 0 y su interrupción, y activa
+ *               la interrupción en el NVIC. Finalmente, inicia el ADC en modo MAT01.
+ * @param[in]    Ninguno
+ * @return       None
+ **********************************************************************/
+void cfgADC(){
+	PINSEL_CFG_Type pinADC = {0};
+	pinADC.Portnum = 0;
+	pinADC.Pinnum = 23;
+	pinADC.Funcnum = 1;
+	pinADC.Pinmode = PINSEL_PINMODE_TRISTATE;
+	pinADC.OpenDrain = PINSEL_PINMODE_NORMAL;
+	PINSEL_ConfigPin(&pinADC);
+
+	ADC_Init(LPC_ADC, 20000);                           // ADC a 200kHz
+	ADC_BurstCmd(LPC_ADC, DISABLE);
+	ADC_EdgeStartConfig(LPC_ADC, ADC_START_ON_FALLING);
+	ADC_ChannelCmd(LPC_ADC, ADC_CHANNEL_0, ENABLE);     // Habilitar CH 0
+	ADC_IntConfig(LPC_ADC, ADC_ADINTEN0, ENABLE);       // Habilitar INT para canal 0
+	NVIC_EnableIRQ(ADC_IRQn);                           // Habilitar INT en NVIC
+    ADC_StartCmd(LPC_ADC, ADC_START_ON_MAT01);
+}
+
+void cfgTimer(){
+	TIM_TIMERCFG_Type cfgTimerMode;
+	TIM_MATCHCFG_Type cfgTimerMatch;
+
+	cfgTimerMode.PrescaleOption = TIM_PRESCALE_USVAL;
+	cfgTimerMode.PrescaleValue = 1000;
+
+	cfgTimerMatch.MatchChannel = 1;
+	cfgTimerMatch.MatchValue = 100 - 1;
+	cfgTimerMatch.IntOnMatch = DISABLE;
+	cfgTimerMatch.ResetOnMatch = ENABLE;
+	cfgTimerMatch.StopOnMatch = DISABLE;
+	cfgTimerMatch.ExtMatchOutputType = TIM_EXTMATCH_TOGGLE;
+
+	TIM_Init(LPC_TIM0, TIM_TIMER_MODE, &cfgTimerMode);
+	TIM_ConfigMatch(LPC_TIM0, &cfgTimerMatch);
+	TIM_Cmd(LPC_TIM0, ENABLE);
+}
+
+/**
+* @brief Handler de la interrupción del ADC
+*/
+void ADC_IRQHandler(void){
+	if(ADC_ChannelGetStatus(LPC_ADC, ADC_CHANNEL_0, ADC_DATA_DONE)){
+		uint16_t adcValue = ADC_ChannelGetData(LPC_ADC, ADC_CHANNEL_0);
+        uint16_t kilos = (adcValue * 999) / 4095;  // Mapeo entre 0 y 999
+        uitoa(kilos, kilos_str, 10);
+		// ADC_ClearIntPending(LPC_ADC, ADC_ADINTEN0); // Clear the ADC interrupt flag
+	}
+}
+
+/*=================================================================================*/
+/*===================================== UART ======================================*/
+/*=================================================================================*/
+
+/**
+ * @brief Configura UART0 para transmitir...
+ */
+void init_uart0(uint32_t baudrate) {
+    // 1. Encender periférico (Power Control)
+    LPC_SC->PCONP |= (1 << 3); // PCUART0 = 1
+
+    // 2. Configurar pines (Pin Select)
+    LPC_PINCON->PINSEL0 |= (1 << 4); // P0.2 como TXD0
+    LPC_PINCON->PINSEL0 |= (1 << 6); // P0.3 como RXD0
+
+    // 3. Configurar formato (Line Control Register)
+    LPC_UART0->LCR = 0x83; // 8-N-1, DLAB = 1
+
+    // 4. Configurar Baudrate
+    uint32_t PCLK_UART = 25000000; // Asumir PCLK = 25MHz
+    uint32_t Fdiv = (PCLK_UART) / (16 * baudrate);
+    LPC_UART0->DLL = Fdiv & 0xFF;
+    LPC_UART0->DLM = (Fdiv >> 8) & 0xFF;
+
+    // 5. Deshabilitar DLAB y habilitar FIFO
+    LPC_UART0->LCR = 0x03; // DLAB = 0
+    LPC_UART0->FCR = 0x07; // Habilitar y resetear FIFOs
+}
+
+/**
+ * @brief Envía un string por UART0...
+ */
+void UART0_EnviarString(char* str) {
+    while (*str != '\0') {
+        while (!(LPC_UART0->LSR & 0x20)); // Esperar hasta que THR esté vacío
+        LPC_UART0->THR = *str; // Enviar caracter
+        str++; // Siguiente caracter
+    }
 }
