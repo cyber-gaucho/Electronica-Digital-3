@@ -2,170 +2,206 @@
  * @file tp.c
  * @brief
  * 
- * 
- * 
- * 
- * 
- * @authors
- *  
- */ 
+ */
 
-#include "LPC17xx.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdint.h>
+#include 	"lpc17xx_i2c.h"
+#include 	"lpc17xx_pinsel.h"
+#include 	"lpc17xx_gpio.h"
+#include    "LiquidCrystal_I2C_LPC.h"
+#include    <stdlib.h>
+#include    <string.h>
 
-/* Ajustes */
-#define SAMPLE_HZ       1     // muestreo por defecto (Hz)
-#define ADC_MAX_CODE    4095
-// #define VREF            3.3f
-#define BUFFER_SAMPLES  600   // tamaño buffer circular
+// --- Display ---
+#define 	LCD_I2C_ADDR 	0x27
+#define 	LCD_I2C_P		LPC_I2C0
+#define     LCD_WIDTH       20
+#define     LCD_HEIGHT      4
+
+#define 	RED_LED_PIN     22
+
+// --- Botones ---
+#define     BTN_PORT        2
+// #define BTN_UP_PIN      0
+// #define BTN_DOWN_PIN    1
+// #define BTN_RIGHT_PIN   2
+// #define BTN_LEFT_PIN    3
+// #define BTN_SAVE_PIN    4
+// #define BTN_SEND_PIN    5
+enum {
+    BTN_UP_PIN = 0,
+    BTN_DOWN_PIN, 
+    BTN_RIGHT_PIN,
+    BTN_LEFT_PIN,
+    BTN_SAVE_PIN,
+    BTN_SEND_PIN
+} BTN_OPT;
+
+volatile int action = 0;
+
+// --- Pin analógico ---
+#define LOAD_CELL_PORT  0
+#define LOAD_CELL_PIN   23  // Entrada analógica (potenciómetro)
+
+// --- PARÁMETROS ---
+#define SERIAL_BAUD     9600
+#define DEBOUNCE_MS     25
+#define BLINK_INTERV_MS 400
+#define UI_REFRESH_MS   100
+
 
 /* Buffers */
-volatile uint16_t buf_temp[BUFFER_SAMPLES];
-volatile uint16_t buf_hum[BUFFER_SAMPLES];
-volatile uint16_t buf_light[BUFFER_SAMPLES];
-volatile uint32_t buf_write_idx = 0;
+#define BUFFER_SIZE 32
+volatile uint16_t adcBuffer[BUFFER_SIZE];
+volatile uint32_t adcBufferIndex = 0;
 volatile bool new_sample_flag = false;
 
-/* Variables de control */
-float sample_hz = SAMPLE_HZ;
-bool running = true;
 
-/* Prototipos (implementa según HAL) */
-void System_Init(void);
-void Timer0_Init_for_sampling(float freq_hz);
-void ADC_Init_timer_trigger(void);
-void DAC_Init(void);
-void USB_CDC_Init_HW(void);
-uint16_t ADC_ReadChannel_raw(uint8_t ch);
-void DAC_SetVoltage(float volts);
-int USB_CDC_Write(const char *s, int len);
-int USB_CDC_Read(char *buf, int maxlen);
+// -------- MENU / OPCIONES ----------
+const char headerID[] = "0123456789ABCDE";
 
-/* Simple media móvil */
-float moving_average(uint16_t *buf, uint32_t idx, int N) {
-    int i; uint32_t sum=0;
-    int count = (N>BUFFER_SAMPLES)?BUFFER_SAMPLES:N;
-    for(i=0;i<count;i++){
-        uint32_t j = (idx + BUFFER_SAMPLES - i) % BUFFER_SAMPLES;
-        sum += buf[j];
-    }
-    return (float)sum / count;
-}
+const char* itemNames[4] = {
+  "Sexo ",
+  "Color",
+  "Categ",
+  "Peso "
+};
+const uint8_t xOffSet = 6;  // Ancho de la categoria mas larga
 
-/* ISR de ADC: se activa al terminar conversión del conjunto */
-void ADC_IRQHandler(void) {
-    // Leer 3 canales
-    uint16_t t = ADC_ReadChannel_raw(0); // temp
-    uint16_t h = ADC_ReadChannel_raw(1); // humedad
-    uint16_t l = ADC_ReadChannel_raw(2); // luz
+const char* options0[] = {"-", "Macho", "Hembra"};
+const char* options1[] = {"Negro", "Colorado", "Careta", "Pampa"};
+const char* options2[] = {"Ternero", "Vaquillona", "Novillo", "Toro", "Vaca", "Vaca Prenada"};
 
-    uint32_t idx = buf_write_idx % BUFFER_SAMPLES;
-    buf_temp[idx]  = t;
-    buf_hum[idx]   = h;
-    buf_light[idx] = l;
-    buf_write_idx++;
-    new_sample_flag = true;
-}
+const char** itemOptions[3] = {options0, options1, options2};
 
-/* Procesa muestra: convierte a voltajes, calcula índice y actualiza DAC y USB */
-void process_sample_and_telemetry(void) {
-    uint32_t idx = (buf_write_idx==0)?0:( (buf_write_idx-1) % BUFFER_SAMPLES );
-    float vt = (buf_temp[idx]/ADC_MAX_CODE) * VREF;
-    float vh = (buf_hum[idx]/ADC_MAX_CODE) * VREF;
-    float vl = (buf_light[idx]/ADC_MAX_CODE) * VREF;
+/**
+ * @brief Contiene la cantidad de alternativas de cada opcion.
+ * Divide el tamaño del array por el tamaño de un elemento.
+ */
+const uint8_t itemOptionsCount[3] = { 
+  sizeof(options0) / sizeof(options0[0]),
+  sizeof(options1) / sizeof(options1[0]),
+  sizeof(options2) / sizeof(options2[0])
+};
 
-    // Convertir a unidades (ej. TMP36: V->°C)
-    float temp_c = (vt - 0.5f) * 100.0f; // TMP36 aproximado
-    float hum_pct = (vh / VREF) * 100.0f; // si sensor linealizado
-    float lux_rel = (vl / VREF) * 100.0f;
+/**
+ * @brief Contiene la selección actual para todas las opciones
+ */
+uint8_t itemSelection[3] = {0, 0, 0};
+int cursorIndex = 0;  // 0..3 (el 3 es lectura, no configurable)
 
-    // Índice de confort simple: (inverse temp deviation + humidity factor)
-    float comfort = (25.0f - fabsf(25.0f - temp_c)) + (50.0f * (1.0f - fabsf(50.0f - hum_pct)/50.0f));
-    // normalizar a 0..VREF
-    float comfort_v = (comfort / 100.0f) * VREF;
-    if (comfort_v < 0) comfort_v = 0;
-    if (comfort_v > VREF) comfort_v = VREF;
+void SysTick_Handler(void);
+void GPIO_IRQHandler(void);
+void drawMenu(int peso);
+void handleAction(void);
+void setupButtons(void);
+void cfgPin(void); // Otros pines como LED
+void cfgI2C0(void);
 
-    // Actualiza DAC
-    DAC_SetVoltage(comfort_v);
-
-    // Envia telemetría por USB (CSV)
-    char line[128];
-    int n = snprintf(line, sizeof(line), "T,%.2f,H,%.2f,L,%.2f,IDX,%.2f\r\n", temp_c, hum_pct, lux_rel, comfort);
-    USB_CDC_Write(line, n);
-}
-
-/* Parser simple de comandos USB
-   Comandos: "RATE x" (Hz), "START", "STOP", "EXPORT" (envía buffer CSV)
-*/
-void handle_usb_commands(void) {
-    char buf[128];
-    int len = USB_CDC_Read(buf, sizeof(buf)-1);
-    if (len <= 0) return;
-    buf[len] = 0;
-    if (strncmp(buf,"RATE ",5)==0) {
-        float r = atof(&buf[5]);
-        if (r > 0.0f && r <= 10.0f) {
-            sample_hz = r;
-            Timer0_Init_for_sampling(sample_hz);
-            USB_CDC_Write("OK RATE\r\n",9);
-        }
-    } else if (strncmp(buf,"STOP",4)==0) {
-        running = false;
-        USB_CDC_Write("OK STOP\r\n",9);
-    } else if (strncmp(buf,"START",5)==0) {
-        running = true;
-        USB_CDC_Write("OK START\r\n",10);
-    } else if (strncmp(buf,"EXPORT",6)==0) {
-        // Export buffer as CSV (oldest->newest)
-        uint32_t i;
-        uint32_t start = (buf_write_idx < BUFFER_SAMPLES) ? 0 : (buf_write_idx % BUFFER_SAMPLES);
-        uint32_t count = (buf_write_idx < BUFFER_SAMPLES) ? buf_write_idx : BUFFER_SAMPLES;
-        for(i=0;i<count;i++){
-            uint32_t idx = (start + i) % BUFFER_SAMPLES;
-            float vt = (buf_temp[idx]/ADC_MAX_CODE) * VREF;
-            float vh = (buf_hum[idx]/ADC_MAX_CODE) * VREF;
-            float vl = (buf_light[idx]/ADC_MAX_CODE) * VREF;
-            float temp_c = (vt - 0.5f) * 100.0f;
-            float hum_pct = (vh / VREF) * 100.0f;
-            float lux_rel = (vl / VREF) * 100.0f;
-            char out[128];
-            int m = snprintf(out, sizeof(out), "%.2f,%.2f,%.2f\r\n", temp_c, hum_pct, lux_rel);
-            USB_CDC_Write(out, m);
-        }
-        USB_CDC_Write("OK EXPORT END\r\n",15);
-    } else {
-        USB_CDC_Write("ERR CMD\r\n",8);
-    }
-}
-
-/* main */
 int main(void) {
-    System_Init();
-    DAC_Init();
-    USB_CDC_Init_HW();
-    ADC_Init_timer_trigger();
-    Timer0_Init_for_sampling(sample_hz);
+    SystemInit();
+    SysTick_Config(SystemCoreClock / 1000); // 1 ms tick para debounce
+        
+	cfgI2C0();        
 
-    // Enable interrupts globally
+	lcd_init(LCD_I2C_ADDR);      // Inicializa el LCD
+
+	lcd_begin(LCD_I2C_P, LCD_WIDTH, LCD_HEIGHT);
+	lcd_clear();     // Limpia la pantalla
+    lcd_setCursor(0, 0); lcd_print("      Grupo 1");
+    lcd_setCursor(0, 1); lcd_print("  Garcia Lautaro M ");
+    lcd_setCursor(0, 2); lcd_print(" Renaudo G Valentino");
+    lcd_setCursor(0, 3); lcd_print("    Digital III");
+
+    setupButtons();
+
+    int peso = 250;
     while (1) {
-        if (new_sample_flag && running) {
-            new_sample_flag = false;
-            process_sample_and_telemetry();
-        }
-        handle_usb_commands();
-        // baja prioridad: dormir o WFI
+        drawMenu(peso);
+        handleAction();
     }
 }
+/*=================================================================================*/
+/*==================================== Botones ====================================*/
+/*=================================================================================*/
 
-/* === Implementar / adaptar las funciones ===
-   - System_Init(): habilita clocks, pines, NVIC.
-   - Timer0_Init_for_sampling(freq): configura MR0 y habilita salida de match que arranca ADC.
-   - ADC_Init_timer_trigger(): configura ADC para start on MAT0.1 y las 3 canales.
-   - ADC_ReadChannel_raw(ch): lee registro ADC global o datos en buffer.
-   - DAC_Init() / DAC_SetVoltage(volts): inicializa DAC y escribe valor.
-   - USB_CDC_*: inicializa stack USB CDC y provee read/write blocking o no-blocking.
-*/
+/**
+ * @brief Configura pines e interrupciones para los botones
+ * @todo: Actualizar con los pines seleccionados 
+ */
+void setupButtons(void) {
+    LPC_GPIO0->FIODIR &= ~((1 << 18) | (1 << 11));
+    LPC_GPIO2->FIODIR &= ~(1 << 13);
+
+    LPC_GPIOINT->IO0IntEnF = (1 << 18) | (1 << 11);
+    LPC_GPIOINT->IO2IntEnF = (1 << 13);
+    NVIC_EnableIRQ(EINT3_IRQn);
+}
+/**
+ * @brief Handler de las interrupciones por GPIO para los botones
+ */
+void EINT3_IRQHandler(void) {
+    if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_UP_PIN)) { action = 1; LPC_GPIOINT->IO2IntClr = (1 << BTN_UP_PIN); }
+    if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_DOWN_PIN)) { action = 2; LPC_GPIOINT->IO2IntClr = (1 << BTN_DOWN_PIN); }
+    if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_RIGHT_PIN)) { action = 3; LPC_GPIOINT->IO2IntClr = (1 << BTN_RIGHT_PIN); }
+    if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_LEFT_PIN)) { action = 4; LPC_GPIOINT->IO2IntClr = (1 << BTN_LEFT_PIN); }
+    if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_SAVE_PIN)) { action = 5; LPC_GPIOINT->IO2IntClr = (1 << BTN_SAVE_PIN); }
+    if (LPC_GPIOINT->IO2IntStatF & (1 << BTN_SEND_PIN)) { action = 6; LPC_GPIOINT->IO2IntClr = (1 << BTN_SEND_PIN); }
+
+}
+
+/* --- Lógica de menú --- */
+void drawMenu(int peso) {
+    lcd_clear();
+    char buffer[21];
+    for (int i = 0; i < 3; i++) {
+        lcd_setCursor(0, i);
+        if (i == cursorIndex) lcd_print(">");
+        else lcd_print(" ");
+        sprintf(buffer, "%s: %s", itemNames[i], itemOptions[i][itemSelection[i]]);
+        lcd_print(buffer);
+    }
+    lcd_setCursor(0, 3);
+    sprintf(buffer, "Peso: %d kg", peso);
+    lcd_print(buffer);
+}
+
+/* --- Acciones --- */
+void handleAction(void) {
+    static uint32_t lastActionTime = 0;
+    if (action == 0) return;
+
+    if ((SysTick->VAL - lastActionTime) < 150) return;
+    lastActionTime = SysTick->VAL;
+
+    switch (action) {
+        case 1: // UP
+            if (cursorIndex > 0) cursorIndex--;
+            break;
+        case 2: // DOWN
+            if (cursorIndex < 2) cursorIndex++;
+            break;
+        case 3: // OK
+            itemSelection[cursorIndex]++;
+            if (itemSelection[cursorIndex] > 2) itemSelection[cursorIndex] = 0;
+            break;
+    }
+    action = 0;
+}
+
+/**
+ * @brief Inicializa el periférico I2C0 a 100kHz.
+ */
+void cfgI2C0(){
+	// Configurar pines P0.27 (SDA0) y P0.28 (SCL0) función 1
+    LPC_PINCON->PINSEL1 &= ~((3 << 22) | (3 << 24));
+    LPC_PINCON->PINSEL1 |=  ((1 << 22) | (1 << 24));
+
+    // Modo estándar (100–400 kHz)
+    LPC_PINCON->I2CPADCFG = 0x00;
+
+    // Inicializar periférico
+	I2C_Init(LCD_I2C_P, 100000);
+
+	/* Enable Slave I2C operation */
+	I2C_Cmd(LCD_I2C_P, ENABLE);
+}

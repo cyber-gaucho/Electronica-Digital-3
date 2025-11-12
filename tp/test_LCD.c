@@ -7,15 +7,17 @@
 #define 	LCD_I2C_ADDR 	0x27
 #define 	LCD_I2C_P		LPC_I2C0
 #define 	RED_LED      	(1<<22)
-
+// Configura LED ROJO
 void cfgPin(void);
+
+// Inicializa el periférico I2C
 void cfgI2C0(void);
 void test_I2C(void);
 
 int main(void) {
 	SystemInit();    // Inicializa el sistema y los relojes
-	cfgPin();        // Configura los pines para I2C
-	cfgI2C0();        // Inicializa el periférico I2C
+	cfgPin();        
+	cfgI2C0();        
 
     GPIO_ClearValue(0,RED_LED);	// P0.22 en bajo (enciende LED)
 	lcd_init(LCD_I2C_ADDR);      // Inicializa el LCD
