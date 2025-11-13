@@ -138,6 +138,22 @@ void drawMenu(uint16_t peso) {
         lcd_print(" kg");
     }
 }
+
+void drawMenu(uint16_t peso) {
+    for(uint8_t i = 0; i<4 ; i++){
+        for (int i = 0; i < 3; i++) {
+            menu[i][0] = "                    ";
+            if (i == cursorIndex) menu[i][0] = ">";
+            else menu[i][0] = " ";
+            menu[i][1] = itemNames[i];
+            menu[i][7] = itemOptions[i][itemSelection[i]];
+        }
+        menu[3][1] = itemNames[i];
+        menu[3][7] = kilos_str;
+        menu[3][10] =" kg";
+    }
+}
+
 void drawMenu(uint16_t peso) {
     int i, j;
     // Líneas de menú configurables
@@ -184,3 +200,130 @@ void drawMenu(uint16_t peso) {
     menu[3][11] = 'k';
     menu[3][12] = 'g';
 }
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+
+// ---- Estructura de datos ----
+typedef struct {
+    uint32_t id;       // ID leído del RFID
+    uint8_t tipo;      // índice de tipo seleccionado
+    uint8_t estado;    // índice de estado
+    uint8_t categoria; // índice de categoría
+    int pesoKg;        // peso cargado
+} Registro;
+
+// ---- Nodo del árbol binario ----
+typedef struct Nodo {
+    Registro data;
+    struct Nodo* izq;
+    struct Nodo* der;
+} Nodo;
+
+// ---- Crear un nuevo nodo ----
+Nodo* crearNodo(Registro r) {
+    Nodo* nuevo = (Nodo*) malloc(sizeof(Nodo));
+    if (!nuevo) return NULL;
+    nuevo->data = r;
+    nuevo->izq = NULL;
+    nuevo->der = NULL;
+    return nuevo;
+}
+
+// ---- Insertar nuevo registro en el árbol ----
+// Si el ID ya existe, actualiza los datos.
+Nodo* insertarNodo(Nodo* raiz, Registro r) {
+    if (raiz == NULL) return crearNodo(r);
+
+    if (r.id < raiz->data.id)
+        raiz->izq = insertarNodo(raiz->izq, r);
+    else if (r.id > raiz->data.id)
+        raiz->der = insertarNodo(raiz->der, r);
+    else
+        raiz->data = r;  // Si ya existe, se actualizan los datos
+
+    return raiz;
+}
+
+// ---- Buscar registro por ID ----
+Nodo* buscarNodo(Nodo* raiz, uint32_t id) {
+    if (raiz == NULL) return NULL;
+    if (id == raiz->data.id) return raiz;
+    if (id < raiz->data.id) return buscarNodo(raiz->izq, id);
+    return buscarNodo(raiz->der, id);
+}
+
+// ---- Recorrer árbol (por ejemplo, para exportar por USB) ----
+void recorrerInOrden(Nodo* raiz) {
+    if (raiz == NULL) return;
+    recorrerInOrden(raiz->izq);
+    printf("ID: %lu | Tipo: %d | Estado: %d | Cat: %d | Peso: %d kg\n",
+           raiz->data.id, raiz->data.tipo, raiz->data.estado,
+           raiz->data.categoria, raiz->data.pesoKg);
+    recorrerInOrden(raiz->der);
+}
+
+// suponiendo display 20x4, menu[][20] y oldLines[][20] declarados y kilos_str ya listo
+
+// Inicializar oldLines con cadenas vacías para forzar primera actualización
+void initOldLines(void) {
+    for (uint8_t r = 0; r < 4; r++) {
+        for (uint8_t c = 0; c < 19; c++) oldLines[r][c] = ' ';
+        oldLines[r][19] = '\0';
+    }
+}
+
+// Compara text contra oldLines[line] sin usar strcmp
+static uint8_t lineChanged(uint8_t line, const char *text) {
+    for (uint8_t i = 0; i < 19; i++) {
+        char a = oldLines[line][i];
+        char b = text[i];
+        if (b == '\0') { // resto debe ser espacios
+            // si alguno de los restantes en oldLines no es espacio, hay cambio
+            for (uint8_t k = i; k < 19; k++) if (oldLines[line][k] != ' ') return 1;
+            return 0; // iguales
+        }
+        if (a != b) return 1;
+    }
+    return 0;
+}
+
+// Copia text en oldLines[line], rellenando con espacios y colocando '\0'
+static void copyToOldLine(uint8_t line, const char *text) {
+    uint8_t i = 0;
+    for (; i < 19; i++) {
+        if (text[i] == '\0') break;
+        oldLines[line][i] = text[i];
+    }
+    // rellena con espacios hasta 19 chars
+    for (; i < 19; i++) oldLines[line][i] = ' ';
+    oldLines[line][19] = '\0';
+}
+
+// Actualiza una línea concreta en el LCD sólo si cambió
+void updateLine(uint8_t line, const char *text) {
+    if (!lineChanged(line, text)) return;  // nada que hacer
+
+    // actualizamos el buffer viejo
+    copyToOldLine(line, text);
+
+    // escribir directamente en la fila: moved cursor y print de 19 caracteres
+    lcd_setCursor(0, line);         // asegurate que la función colocca cursor correctamente
+    lcd_print(oldLines[line]);      // tu lcd_print debería aceptar '\0' terminated string
+}
+
+// Actualiza las 4 líneas (llamar tras actualizar menu[][] con drawMenu)
+void updateDisplay(void) {
+    updateLine(0, menu[0]);
+    updateLine(1, menu[1]);
+    updateLine(2, menu[2]);
+    updateLine(3, menu[3]);
+}
+
+void initOldLines(void)
+static uint8_t lineChanged(uint8_t line, const char *text)
+static void copyToOldLine(uint8_t line, const char *text)
+void updateLine(uint8_t line, const char *text)
+void updateDisplay(void)

@@ -50,8 +50,8 @@ enum {
     BTN_ID_PIN      // Dejar ID ultimo en este enum
 } BTN_OPT;
 
-volatile int action = 0;
-uint8_t firstID = 0;
+volatile uint8_t action = 0;
+volatile uint8_t firstID = 0;
 
 // --- Pin analógico ---
 #define LOAD_CELL_PORT  0
@@ -64,12 +64,12 @@ uint8_t firstID = 0;
 #define UI_REFRESH_MS   100
 
 
-/* Buffers */
+// --- ADC ---
 #define BUFFER_SIZE 32
 volatile uint16_t adcBuffer[BUFFER_SIZE];
 volatile uint32_t adcBufferIndex = 0;
 volatile bool new_sample_flag = false;
-uint16_t kilos;
+uint16_t kilos = 0;
 char kilos_str[3];
 // -------- MENU / OPCIONES ----------
 const char headerID[] = "0123456789ABCDE";
@@ -102,18 +102,44 @@ const uint8_t itemOptionsCount[3] = {
  * @brief Contiene la selección actual para todas las opciones
  */
 uint8_t itemSelection[3] = {0, 0, 0};
-int cursorIndex = 0;  // 0..3 (el 3 es lectura, no configurable)
+uint8_t cursorIndex = 0;  // 0..3 (el 3 es lectura, no configurable)
 
 char menu[4][20];
 char oldLines[4][20];
 
-void drawMenu(uint16_t peso);
-void updateDisplay();
-void updateLine(uint8_t line, const char* text);
+// --- Estructura de datos ---
+typedef struct {
+    uint32_t id;       // ID leído del RFID
+    uint8_t tipo;      // índice de tipo seleccionado
+    uint8_t estado;    // índice de estado
+    uint8_t categoria; // índice de categoría
+    int pesoKg;        // peso cargado
+} Registro;
+
+// ---- Nodo del árbol binario ----
+typedef struct Nodo {
+    Registro data;
+    struct Nodo* izq;
+    struct Nodo* der;
+} Nodo;
+
+Nodo* crearNodo(Registro r);
+Nodo* insertarNodo(Nodo* raiz, Registro r);
+Nodo* buscarNodo(Nodo* raiz, uint32_t id);
+void recorrerInOrden(Nodo* raiz);
+
+void drawMenu();
+void initOldLines(void);
+static uint8_t lineChanged(uint8_t line, const char *text);
+static void copyToOldLine(uint8_t line, const char *text);
+void updateLine(uint8_t line, const char *text);
+void updateDisplay(void);
 
 void handleAction(void);
 void setupButtons(void);
 void cfgPin(void); // Otros pines como LED
+void setLED(uint8_t r, uint8_t g, uint8_t b);
+
 void cfgI2C0(void);
 /**
 * @brief Configuración del ADC (P0.23)
@@ -128,7 +154,7 @@ static void delayUs(uint32_t us);
 
 int main(void) {
     SystemInit();
-    SysTick_Config(SystemCoreClock / 1000); // 1 ms tick para debounce
+    // SysTick_Config(SystemCoreClock / 1000); // 1 ms tick para debounce
         
 	cfgI2C0();
 
@@ -185,6 +211,11 @@ void cfgPin(void){
     GPIO_SetValue(3,1<<LED_BLUE_PIN|1<<LED_GREEN_PIN);
 }
 
+void setLED(uint8_t r, uint8_t g, uint8_t b){
+    if(r) GPIO_ClearValue(0, 1<<LED_RED_PIN); else GPIO_SetValue(0, 1<<LED_RED_PIN);
+    if(g) GPIO_ClearValue(3, 1<<LED_GREEN_PIN); else GPIO_SetValue(3, 1<<LED_GREEN_PIN);
+    if(b) GPIO_ClearValue(3, 1<<LED_BLUE_PIN); else GPIO_SetValue(3, 1<<LED_BLUE_PIN);
+}
 /*=================================================================================*/
 /*==================================== Botones ====================================*/
 /*=================================================================================*/
@@ -227,11 +258,11 @@ void EINT3_IRQHandler(void) {
 
 /* --- Acciones --- */
 void handleAction(void) {
-    static uint32_t lastActionTime = 0;
+    // static uint32_t lastActionTime = 0;
     if (action == 0) return;
 
-    if ((SysTick->VAL - lastActionTime) < 150) return;
-    lastActionTime = SysTick->VAL;
+    // if ((SysTick->VAL - lastActionTime) < 150) return;
+    // lastActionTime = SysTick->VAL;
 
     switch (action) {
         case 1: // UP
@@ -254,21 +285,15 @@ void handleAction(void) {
             break;
         case 5: // SAVE
             // TODO
-            GPIO_ClearValue(0, 1<<LED_RED_PIN);
-            GPIO_SetValue(3, 1<<LED_BLUE_PIN);
-            GPIO_SetValue(3, 1<<LED_GREEN_PIN);
+            setLED(1, 0, 0);
             break;
         case 6: // SEND
             // TODO
-            GPIO_ClearValue(3, 1<<LED_BLUE_PIN);
-            GPIO_SetValue(0, 1<<LED_RED_PIN);
-            GPIO_SetValue(3, 1<<LED_GREEN_PIN);
+            setLED(0, 0, 1);
             break;
         case 7: // ID
             // TODO
-            GPIO_ClearValue(3, 1<<LED_GREEN_PIN);
-            GPIO_SetValue(3, 1<<LED_BLUE_PIN);
-            GPIO_SetValue(0, 1<<LED_RED_PIN);
+            setLED(0, 1, 0);
             break;
     }
     action = 0;
@@ -279,34 +304,97 @@ void handleAction(void) {
 /*=================================================================================*/
 
 /* --- Lógica de menú --- */
-void drawMenu(uint16_t peso) {
-    for(uint8_t i = 0; i<4 ; i++){
-        for (int i = 0; i < 3; i++) {
-            menu[i][0] = "                    ";
-            if (i == cursorIndex) menu[i][0] = ">";
-            else menu[i][0] = " ";
-            menu[i][1] = itemNames[i];
-            menu[i][7] = itemOptions[i][itemSelection[i]];
+
+void drawMenu(void) {
+    uint8_t i, j;
+    const char* src;
+
+    for (i = 0; i < 4; i++) {
+        // Limpia cada línea con espacios
+        for (j = 0; j < 20; j++) menu[i][j] = ' ';
+        menu[i][19] = '\0';
+
+        j = 0;
+        // Indicador de selección
+        menu[i][j++] = (i == cursorIndex) ? '>' : ' ';
+
+        // Escribe nombre del ítem
+        src = itemNames[i];
+        while (*src && j < 20) menu[i][j++] = *src++;
+
+        if (j < 20) menu[i][j++] = ' ';
+
+        // Escribe valor u opción
+        if (i < 3) src = itemOptions[i][itemSelection[i]];
+        else src = kilos_str;  // usa el string ya convertido
+
+        while (*src && j < 20) menu[i][j++] = *src++;
+
+        // Si es la línea de peso, agrega " kg"
+        if (i == 3 && j < 17) {
+            menu[i][j++] = ' ';
+            menu[i][j++] = 'k';
+            menu[i][j++] = 'g';
         }
-        menu[3][1] = itemNames[i];
-        menu[3][7] = kilos_str;
-        menu[3][10] =" kg";
+
+        // Rellena hasta el final con espacios
+        while (j < 19) menu[i][j++] = ' ';
+        menu[i][19] = '\0';
     }
 }
 
-void updateDisplay() { 
-  updateLine(0, menu[0]);
-  updateLine(1, menu[1]);
-  updateLine(2, menu[2]);
-  updateLine(3, menu[3]);
+void initOldLines(void) {
+    for (uint8_t r = 0; r < 4; r++) {
+        for (uint8_t c = 0; c < 19; c++) oldLines[r][c] = ' ';
+        oldLines[r][19] = '\0';
+    }
 }
 
-void updateLine(uint8_t line, const char* text) {
-  if (strcmp(oldLines[line], text) != 0) {           // Solo actualiza si hay cambio
-    lcd_clearRow(line);
-    lcd_print(text);
-    strcpy(oldLines[line], text);
-  }
+// Compara text contra oldLines[line] sin usar strcmp
+static uint8_t lineChanged(uint8_t line, const char *text) {
+    for (uint8_t i = 0; i < 19; i++) {
+        char a = oldLines[line][i];
+        char b = text[i];
+        if (b == '\0') { // resto debe ser espacios
+            // si alguno de los restantes en oldLines no es espacio, hay cambio
+            for (uint8_t k = i; k < 19; k++) if (oldLines[line][k] != ' ') return 1;
+            return 0; // iguales
+        }
+        if (a != b) return 1;
+    }
+    return 0;
+}
+
+// Copia text en oldLines[line], rellenando con espacios y colocando '\0'
+static void copyToOldLine(uint8_t line, const char *text) {
+    uint8_t i = 0;
+    for (; i < 19; i++) {
+        if (text[i] == '\0') break;
+        oldLines[line][i] = text[i];
+    }
+    // rellena con espacios hasta 19 chars
+    for (; i < 19; i++) oldLines[line][i] = ' ';
+    oldLines[line][19] = '\0';
+}
+
+// Actualiza una línea concreta en el LCD sólo si cambió
+void updateLine(uint8_t line, const char *text) {
+    if (!lineChanged(line, text)) return;  // nada que hacer
+
+    // actualizamos el buffer viejo
+    copyToOldLine(line, text);
+
+    // escribir directamente en la fila: moved cursor y print de 19 caracteres
+    lcd_setCursor(0, line);         // asegurate que la función colocca cursor correctamente
+    lcd_print(oldLines[line]);      // tu lcd_print debería aceptar '\0' terminated string
+}
+
+// Actualiza las 4 líneas (llamar tras actualizar menu[][] con drawMenu)
+void updateDisplay(void) {
+    updateLine(0, menu[0]);
+    updateLine(1, menu[1]);
+    updateLine(2, menu[2]);
+    updateLine(3, menu[3]);
 }
 
 /**
@@ -384,7 +472,7 @@ void cfgTimer(){
 void ADC_IRQHandler(void){
 	if(ADC_ChannelGetStatus(LPC_ADC, ADC_CHANNEL_0, ADC_DATA_DONE)){
 		uint16_t adcValue = ADC_ChannelGetData(LPC_ADC, ADC_CHANNEL_0);
-        uint16_t kilos = (adcValue * 999) / 4095;  // Mapeo entre 0 y 999
+        kilos = (adcValue * 999) / 4095;  // Mapeo entre 0 y 999
         uitoa(kilos, kilos_str, 10);
 		// ADC_ClearIntPending(LPC_ADC, ADC_ADINTEN0); // Clear the ADC interrupt flag
 	}
@@ -428,4 +516,51 @@ void UART0_EnviarString(char* str) {
         LPC_UART0->THR = *str; // Enviar caracter
         str++; // Siguiente caracter
     }
+}
+
+/*=================================================================================*/
+/*============================== ESTRUCTURA DE DATOS ==============================*/
+/*=================================================================================*/
+
+// ---- Crear un nuevo nodo ----
+Nodo* crearNodo(Registro r) {
+    Nodo* nuevo = (Nodo*) malloc(sizeof(Nodo));
+    if (!nuevo) return NULL;
+    nuevo->data = r;
+    nuevo->izq = NULL;
+    nuevo->der = NULL;
+    return nuevo;
+}
+
+// ---- Insertar nuevo registro en el árbol ----
+// Si el ID ya existe, actualiza los datos.
+Nodo* insertarNodo(Nodo* raiz, Registro r) {
+    if (raiz == NULL) return crearNodo(r);
+
+    if (r.id < raiz->data.id)
+        raiz->izq = insertarNodo(raiz->izq, r);
+    else if (r.id > raiz->data.id)
+        raiz->der = insertarNodo(raiz->der, r);
+    else
+        raiz->data = r;  // Si ya existe, se actualizan los datos
+
+    return raiz;
+}
+
+// ---- Buscar registro por ID ----
+Nodo* buscarNodo(Nodo* raiz, uint32_t id) {
+    if (raiz == NULL) return NULL;
+    if (id == raiz->data.id) return raiz;
+    if (id < raiz->data.id) return buscarNodo(raiz->izq, id);
+    return buscarNodo(raiz->der, id);
+}
+
+// ---- Recorrer árbol (por ejemplo, para exportar por USB) ----
+void recorrerInOrden(Nodo* raiz) {
+    if (raiz == NULL) return;
+    recorrerInOrden(raiz->izq);
+    // printf("ID: %lu | Tipo: %d | Estado: %d | Cat: %d | Peso: %d kg\n",
+    //        raiz->data.id, raiz->data.tipo, raiz->data.estado,
+    //        raiz->data.categoria, raiz->data.pesoKg);
+    recorrerInOrden(raiz->der);
 }

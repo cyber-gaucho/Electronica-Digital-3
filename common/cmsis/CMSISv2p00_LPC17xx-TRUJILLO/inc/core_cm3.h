@@ -31,6 +31,7 @@
 #ifndef __CORE_CM3_H_GENERIC
 #define __CORE_CM3_H_GENERIC
 
+#include <stdint.h>                      /*!< standard types definitions                      */
 
 /** \mainpage CMSIS Cortex-M3
    
@@ -88,10 +89,13 @@
 #elif defined   (  __TASKING__  )
   #define __ASM            __asm                                      /*!< asm keyword for TASKING Compiler      */
   #define __INLINE         inline                                     /*!< inline keyword for TASKING Compiler   */
-
+#else
+  #define __ASM            __asm
+  #define __INLINE         inline
 #endif
 
 #include <stdint.h>                      /*!< standard types definitions                      */
+
 #include "core_cmInstr.h"                /*!< Core Instruction Access                         */
 #include "core_cmFunc.h"                 /*!< Core Function Access                            */
 
