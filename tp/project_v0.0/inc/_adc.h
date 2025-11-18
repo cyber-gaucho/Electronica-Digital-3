@@ -1,5 +1,5 @@
-#ifndef ADC_H
-#define ADC_H
+#ifndef _ADC_H
+#define _ADC_H
 
 #include "lpc17xx_adc.h"
 #include "lpc17xx_pinsel.h"

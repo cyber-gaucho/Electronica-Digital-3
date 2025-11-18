@@ -6,6 +6,7 @@
 #include    "LiquidCrystal_I2C_LPC.h"
 #include    <stdlib.h>
 
+typedef unsigned int       uint32_t;
 // --- Display ---
 #define 	LCD_I2C_ADDR 	0x27
 #define 	LCD_I2C_P		LPC_I2C0
@@ -62,7 +63,7 @@ void forceUpdate(void);
 uint16_t kilos = 123;
 // char kilos_str[3]= {"123"};
 
-static void delayUs(uint32_t us);
+void delayUs(uint32_t us);
 
 // --- Conf de Perifericos ---
 void cfgI2C0(void);
@@ -79,6 +80,7 @@ void cfgLED(void);
 int main(void) {
     SystemInit();
     // SysTick_Config(SystemCoreClock / 1000); // 1 ms tick para debounce
+
     cfgLED();    
 	cfgI2C0();
 
@@ -105,11 +107,10 @@ int main(void) {
     
 }
 
-static void delayUs(uint32_t us) {
-    uint32_t cycles = (SystemCoreClock / 1000000) * us;
-    for (volatile uint32_t i = 0; i < cycles; i++) {
-        __NOP();
-    }
+void delayUs(uint32_t delayTime){
+	for(uint32_t i=0; i<delayTime; i++){
+		__NOP();
+	}
 }
 
 /*=================================================================================*/

@@ -148,8 +148,6 @@ void cfgADC();
 
 void cfgTimer();
 
-void lcd_update_kilos(uint16_t value);
-
 static void delayUs(uint32_t us);
 
 int main(void) {
@@ -165,7 +163,7 @@ int main(void) {
     lcd_setCursor(0, 0); lcd_print("   ED3 - Grupo 1");
     lcd_setCursor(0, 1); lcd_print("  Garcia Lautaro M ");
     lcd_setCursor(0, 2); lcd_print(" Renaudo G Valentino");
-    lcd_setCursor(0, 3); lcd_print("  Registro ganadero");
+    lcd_setCursor(0, 3); lcd_print("  Registro Ganadero");
 
     cfgADC();
     cfgTimer();
@@ -173,7 +171,7 @@ int main(void) {
     setupButtons();
     while (!firstID);
     while (1) {
-        drawMenu(kilos);
+        drawMenu();
         updateDisplay();
         handleAction();
         delayUs(5000);
@@ -269,12 +267,12 @@ void handleAction(void) {
             if (cursorIndex > 0) cursorIndex--;
             break;
         case 2: // DOWN
-            if (cursorIndex < 2) cursorIndex++;
+            if (cursorIndex < 3) cursorIndex++;
             break;
         case 3: // RIGHT
             if(cursorIndex != 3) {
                 itemSelection[cursorIndex]++;
-                if (itemSelection[cursorIndex] > 2) itemSelection[cursorIndex] = 0;
+                if (itemSelection[cursorIndex] > itemOptionsCount[cursorIndex]) itemSelection[cursorIndex] = 0;
             }
             break;
         case 4: // LEFT

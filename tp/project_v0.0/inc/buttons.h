@@ -26,7 +26,7 @@
 
 void buttons_init();
 
-void buttons_command();
+void buttons_command(FunctionalState NewState);
 
 void buttons_handle_action();
 

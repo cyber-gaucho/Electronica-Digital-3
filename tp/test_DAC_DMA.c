@@ -192,7 +192,7 @@ void configDMA_DAC_Channel(){
  * @param ms Tiempo en milisegundos a mantener el tono
  */
 void generateTone(uint16_t frec_Hz,uint32_t ms){
-	configDMA_DAC_Channel();
+	configDMA_DAC_Channel();	// Configura, no inicia/habilita DMA
 
 	// Ajusta el parámetro de timeout del DAC para frecuencia y cantidad de muestras
 	uint32_t tmp;

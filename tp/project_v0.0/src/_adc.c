@@ -1,4 +1,4 @@
-#include "adc.h"
+#include "_adc.h"
 
 void adc_init(void){
     PINSEL_CFG_Type pinADC = {0};
@@ -32,6 +32,7 @@ void adc_init(void){
 
 	TIM_Init(LPC_TIM0, TIM_TIMER_MODE, &cfgTimerMode);
 	TIM_ConfigMatch(LPC_TIM0, &cfgTimerMatch);
+	adc_comand(ENABLE);
 }
 
 
@@ -40,7 +41,7 @@ void adc_comand(FunctionalState NewState){
         ADC_StartCmd(LPC_ADC, ADC_START_ON_MAT01);
         TIM_Cmd(LPC_TIM0, ENABLE);
         NVIC_EnableIRQ(ADC_IRQn);
-    }else{
+    } else {
         TIM_Cmd(LPC_TIM0, DISABLE);
         ADC_StopCmd(LPC_ADC, ADC_START_ON_MAT01);
         TIM_ResetCounter(LPC_TIM0);

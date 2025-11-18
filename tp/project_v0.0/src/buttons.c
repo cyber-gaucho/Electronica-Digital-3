@@ -24,7 +24,7 @@ void buttons_init(){
     LPC_GPIOINT->IO2IntClr = 0xFFFF;
 }
 
-void buttons_command(){
+void buttons_command(FunctionalState NewState){
     if(NewState == ENABLE){
         NVIC_EnableIRQ(EINT3_IRQn);
     }else{

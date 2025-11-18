@@ -1,12 +1,14 @@
 #include "state_machine.h"
-#include "buttons.h"
-#include "ui.h"
-#include "storage.h"
-#include "adc.h"
-#include "LiquidCrystal_I2C_LPC.h"
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+
+// iNCLUDES EN .H
+// #include "buttons.h"
+// #include "ui.h"
+// #include "storage.h"
+// #include "adc.h"
+// #include "LiquidCrystal_I2C_LPC.h"
+// #include <stdint.h>
+// #include <stdlib.h>
+// #include <string.h>
 
 // External variables
 extern volatile uint8_t action;  // Button action from ISR
@@ -203,7 +205,7 @@ static void handleMenuNavigation(void) {
             reg.tipo = itemSelection[0];      // Sexo
             reg.estado = itemSelection[1];    // Color
             reg.categoria = itemSelection[2]; // Categ
-            reg.pesoKg = (int)kilos;
+            reg.pesoKg = (uint16_t)kilos;
             
             // Insert into storage tree
             storage_root = insertarNodo(storage_root, reg);
