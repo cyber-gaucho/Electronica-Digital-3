@@ -24,6 +24,25 @@
  * @
  */
 void ui_init(void);
+
+/**
+* @brief Displays the boot screen
+*/
+void ui_showBootScreen(void);
+
+/**
+* @brief Displays the wait ID screen
+*/
+void ui_showWaitIdScreen(void);
+
+/**
+* @brief Handles menu navigation in ST_MENU state
+*/
+void ui_showSavedScreen(uint32_t id);
+
+void ui_showSendScreen(uint32_t guardados);
+
+void ui_printLine(uint8_t row, const char *text);
 void ui_update(void);
 void ui_update_kilos(uint16_t value);
 void ui_update_menu(void);

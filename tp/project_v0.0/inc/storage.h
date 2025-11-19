@@ -4,10 +4,10 @@
 // --- Estructura de datos ---
 typedef struct {
     uint32_t id;       // ID leído del RFID
-    uint8_t tipo;      // índice de tipo seleccionado
-    uint8_t estado;    // índice de estado
-    uint8_t categoria; // índice de categoría
-    int pesoKg;        // peso cargado
+    uint8_t raza;      // índice de tipo seleccionado
+    uint8_t categoria;    // índice de estado
+    uint8_t origen; // índice de categoría
+    uint16_t pesoKg;        // peso cargado
 } Registro;
 
 // ---- Nodo del árbol binario ----

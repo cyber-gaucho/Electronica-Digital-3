@@ -1,15 +1,7 @@
 #ifndef STATE_MACHINE
 #define STATE_MACHINE
 
-#include "state_machine.h"
-#include "buttons.h"
-#include "ui.h"
-#include "storage.h"
-#include "adc.h"
-#include "LiquidCrystal_I2C_LPC.h"
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+
 
 typedef enum {
     ST_BOOT,          // Pantalla inicial

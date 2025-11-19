@@ -1,9 +1,6 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "lpc17xx_pinsel.h"
-#include "lpc17xx_gpio.h"
-
 /* LED Pin Configuration */
 #define LED_RED_PIN     22  // P0.22
 #define LED_BLUE_PIN    26  // P3.26
@@ -28,9 +25,12 @@ void LED_init(void);
 void LED_set(uint8_t r, uint8_t g, uint8_t b);
 
 /**
+ * @brief Retardo bloqueante utilizando TIM2 (milisegundos).
+ *
+ * Espera activa utilizando un flag modificado por la ISR del TIMER2.
+ *
+ * @param ms Tiempo a esperar en milisegundos.
  */
-void delay();
-
-
+ void delayTIM2(uint32_t ms);
 
 #endif
