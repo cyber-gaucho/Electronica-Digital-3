@@ -1,5 +1,8 @@
 #include "ui.h"
 
+#include 	"lpc17xx_i2c.h"
+#include    "LiquidCrystal_I2C_LPC.h"
+
     void ui_init(void){
 
         I2C0_init();

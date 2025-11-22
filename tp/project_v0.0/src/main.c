@@ -5,19 +5,6 @@
  * @copyright MIT License
  * @note Este archivo es el punto de entrada del proyecto
  */
-/**
- * TODO:
- *  Revisar funciones storage
- *  Revisar funciones de save and send
- *  Agegar DAC con DMA
- * DONE:
- *  Mover actualización de display a ui.c 
- *  Realizar delay por timer 2 con INT, Reset y Stop ENABLED
- *  Mover ReadId de st_mch a id_reader.h/.c
- *  Agregar uitoa() a utils
- *  Agregar delay no bloqueante en menu
- */
-
 #include "lpc17xx.h"
 
 // Define serial communication method before including serial.h
@@ -39,27 +26,27 @@
 
 volatile uint32_t ticksMs = 0;
 uint16_t kilos = 0;
-system_state_t state = ST_BOOT;
-volatile uint8_t action = 0; // Ver
+system_state_t estado;
+volatile uint8_t action = 0;
 
 
 int main(void) {
-
     // Inicialización general
-    SystemInit();
-    
+	SystemInit();
+
     // Inicialización de módulos
+    utils_init();
     ui_init();
-    buttons_init();       // Usa interrupciones (GPIOInt)
     adc_init();
-    // dac_init();  // revisar electrónica
+    buttons_init();       // Usa interrupciones (GPIOInt)
+    dac_init();
     serial_init();
     id_init(ID_PREFIX, ID_START);
-    // storage_init(); // placeholder
+    storage_init();
 
     // Estado inicial
-    state = ST_BOOT;
-    changeState(state);
+    estado = ST_BOOT;
+    changeState(estado);
 
     while (1) {
         // La lógica principal del sistema

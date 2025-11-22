@@ -9,12 +9,11 @@
 #include "lpc_types.h"
 #include <stdint.h>
 #include <stdarg.h>
-// #include "lpc17xx_pinsel.h"
 
 #ifdef SERIAL_UART
-#define UART_PORT LPC_UART0
 #include "lpc17xx_uart.h"
 #include "lpc_types.h"
+#define UART_PORT ((LPC_UART_TypeDef *) LPC_UART0_BASE)
 #endif
 
 #ifdef SERIAL_USB

@@ -3,6 +3,7 @@
  * @brief Unified serial communication implementation (UART/USB)
  */
 #include "serial.h"
+#include "lpc17xx_pinsel.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -14,45 +15,40 @@ static char printf_buffer[256];
 /**
  * @brief Initialize UART0 (TX P0.2, RX P0.3)
  */
-void UART_Init(void)
+void uart_init(void)
 {
-    PINSEL_CFG_Type PinCfg;
+	PINSEL_CFG_Type cfgPinTXD0;
+	PINSEL_CFG_Type cfgPinRXD0;
 
-    // TXD0 y RXD0
-    PinCfg.Funcnum = 1;
-    PinCfg.OpenDrain = 0;
-    PinCfg.Pinmode = 0;
-    PinCfg.Portnum = 0;
+	cfgPinTXD0.Portnum = 0;
+	cfgPinTXD0.Pinnum = 2;
+	cfgPinTXD0.Funcnum = 1;
+	cfgPinTXD0.Pinmode = PINSEL_PINMODE_NORMAL;
+	cfgPinTXD0.OpenDrain = PINSEL_PINMODE_NORMAL;
+	PINSEL_ConfigPin(&cfgPinTXD0);
 
-    PinCfg.Pinnum = 2; // TXD0
-    PINSEL_ConfigPin(&PinCfg);
+	cfgPinRXD0.Portnum = 0;
+	cfgPinRXD0.Pinnum = 3;
+	cfgPinRXD0.Funcnum = 1;
+	cfgPinRXD0.Pinmode = PINSEL_PINMODE_NORMAL;
+	cfgPinRXD0.OpenDrain = PINSEL_PINMODE_NORMAL;
+	PINSEL_ConfigPin(&cfgPinRXD0);
 
-    PinCfg.Pinnum = 3; // RXD0
-    PINSEL_ConfigPin(&PinCfg);
+	UART_CFG_Type UARTConfig;
+	UART_FIFO_CFG_Type FIFOConfig;
 
-    UART_CFG_Type UARTConfigStruct;
-    UART_ConfigStructInit(&UARTConfigStruct);
-    UARTConfigStruct.Baud_rate = 115200;
+	UART_ConfigStructInit(&UARTConfig);
+	UART_FIFOConfigStructInit(&FIFOConfig);
 
-    UART_Init(UART_PORT, &UARTConfigStruct);
-    UART_TxCmd(UART_PORT, ENABLE);
-}
-
-/**
- * @brief Enable/disable UART transmission
- */
-void UART_command(FunctionalState NewState)
-{
-    if(NewState == ENABLE)
-        UART_TxCmd(UART_PORT, ENABLE);
-    else 
-        UART_TxCmd(UART_PORT, DISABLE);
+	UART_Init(UART_PORT, &UARTConfig);
+	UART_FIFOConfig(UART_PORT, &FIFOConfig);
+	UART_TxCmd(UART_PORT, ENABLE);
 }
 
 /**
  * @brief Send a string via UART
  */
-void UART_SendString(uint8_t *str)
+void uart_SendString(uint8_t *str)
 {
     UART_Send(UART_PORT, str, strlen((char *)str), BLOCKING);
 }
@@ -62,7 +58,7 @@ void UART_SendString(uint8_t *str)
  */
 void serial_init(void)
 {
-    UART_Init();
+    uart_init();
 }
 
 /**
@@ -86,7 +82,7 @@ void serial_printf(const char *format, ...)
  */
 void serial_send_string(const char *str)
 {
-    UART_SendString((uint8_t *)str);
+    uart_SendString((uint8_t *)str);
 }
 
 /**

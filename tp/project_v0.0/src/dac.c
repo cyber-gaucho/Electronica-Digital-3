@@ -1,18 +1,19 @@
 #include "dac.h"
 
 #include "utils.h"
-
+#include "lpc17xx_pinsel.h"
+#include "lpc17xx_timer.h"
 #include "lpc17xx_dac.h"
-#include "lpc17xx.gpdma.h"
+#include "lpc17xx_gpdma.h"
 
 
 #define SAMPLES_AMOUNT      256     // Cantidad de muestras de la tabla de seno
 #define SINE_FREQ_IN_HZ     440     // Frecuencia target en Hz (tono La4)
 #define PCLK_DAC_IN_MHZ     25      // Frecuencia de clock periférico del DAC (MHz)
 
-volatile uint8_t delay_flag = 0;    // Flag para manejo de retardo por timer
+static GPDMA_LLI_Type LLI1 __attribute__((aligned(4)));
 
-uint32_t sine_bank[SAMPLES_AMOUNT] = {
+const uint32_t sine_bank[SAMPLES_AMOUNT] = {
 	32768, 33536, 34368, 35136, 35968, 36736, 37568, 38336, 39104, 39936, 40704, 41472,
 	42240, 43008, 43776, 44544, 45248, 46016, 46720, 47424, 48192, 48896, 49536, 50240,
 	50944, 51584, 52224, 52864, 53504, 54144, 54720, 55296, 55872, 56448, 56960, 57536,
@@ -37,6 +38,59 @@ uint32_t sine_bank[SAMPLES_AMOUNT] = {
 	29504, 30336, 31104, 31936
 };
 
+/**
+ * @brief Configuración de TIM1 para que interrumpa en "ms" ms.
+ *
+ * @param ms Tiempo en ms al cual se generará la interrupción (match)
+ */
+static void TIM1_init(uint32_t ms){
+	TIM_TIMERCFG_Type cfgTimerMode;
+	TIM_MATCHCFG_Type cfgTimerMatch;
+
+	cfgTimerMode.PrescaleOption = TIM_PRESCALE_USVAL;	// Unidad: us
+	cfgTimerMode.PrescaleValue = 1000;					// 1000 us = 1 ms
+
+	cfgTimerMatch.MatchChannel = 0;					// Usar canal MR0
+	cfgTimerMatch.IntOnMatch = ENABLE;					// Habilita interrupción al match
+	cfgTimerMatch.StopOnMatch = DISABLE;				// No detener el timer al match
+	cfgTimerMatch.ResetOnMatch = ENABLE;				// No reiniciar el timer al match
+	cfgTimerMatch.ExtMatchOutputType = TIM_EXTMATCH_NOTHING; // Ninguna salida extra
+	cfgTimerMatch.MatchValue = ms - 1;					// Valor de comparación: ms ciclos
+
+	TIM_Init(LPC_TIM1, TIM_TIMER_MODE, &cfgTimerMode);
+	TIM_ConfigMatch(LPC_TIM1, &cfgTimerMatch);
+	TIM_Cmd(LPC_TIM1, ENABLE);							// Arranca el timer
+
+	NVIC_EnableIRQ(TIMER1_IRQn);						// Habilita IRQ en NVIC
+}
+
+static void configDMA_DAC_Channel(){
+	//------ Configuración de la Linked List del DMA ------
+	// - Source width: 32 bits
+	// - Dest width: 32 bits
+	// - Source address se incrementa, destino (DAC) fijo
+
+	LLI1.SrcAddr = (uint32_t) sine_bank;
+	LLI1.DstAddr = (uint32_t) &LPC_DAC->DACR;
+	LLI1.NextLLI = (uint32_t) &LLI1;	// Circular (auto-loop)
+	LLI1.Control = SAMPLES_AMOUNT | (1<<19) | (1<<22) | (1<<26);
+
+	GPDMA_Init();
+
+	// Configuración y habilitación del Canal 0 de DMA
+	GPDMA_Channel_CFG_Type GPDMACfg;
+	GPDMACfg.ChannelNum = 0;
+	GPDMACfg.SrcMemAddr = (uint32_t)sine_bank;
+	GPDMACfg.DstMemAddr = 0;	// Es M2P
+	GPDMACfg.TransferSize = SAMPLES_AMOUNT;
+	GPDMACfg.TransferWidth = 0;	
+	GPDMACfg.TransferType = GPDMA_TRANSFERTYPE_M2P;
+	GPDMACfg.SrcConn = 0;
+	GPDMACfg.DstConn = GPDMA_CONN_DAC;
+	GPDMACfg.DMALLI = (uint32_t)&LLI1;
+	GPDMA_Setup(&GPDMACfg);
+}
+
 void dac_init(){
 	// Configuración de P0.26 como salida analógica del DAC
 	PINSEL_CFG_Type pinCfg;
@@ -56,34 +110,8 @@ void dac_init(){
 	DAC_ConfigDAConverterControl(LPC_DAC, &dacCfg);
 }
 
-void configDMA_DAC_Channel(){
-	//------ Configuración de la Linked List del DMA ------
-	// - Source width: 32 bits
-	// - Dest width: 32 bits
-	// - Source address se incrementa, destino (DAC) fijo
-	GPDMA_LLI_Type LLI1;
-	LLI1.SrcAddr = (uint32_t) sine_bank;
-	LLI1.DstAddr = (uint32_t) &LPC_DAC->DACR;
-	LLI1.NextLLI = (uint32_t) &LLI1;	// Circular (auto-loop)
-	LLI1.Control = SAMPLES_AMOUNT | (1<<19) | (1<<22) | (1<<26);
 
-	GPDMA_Init();
-
-	// Configuración y habilitación del Canal 0 de DMA
-	GPDMA_Channel_CFG_Type GPDMACfg;
-	GPDMACfg.ChannelNum = 0;
-	GPDMACfg.SrcMemAddr = (uint32_t)sine_bank;
-	GPDMACfg.DstMemAddr = 0;	// Cuando es M2P, no se usa
-	GPDMACfg.TransferSize = SAMPLES_AMOUNT;
-	GPDMACfg.TransferWidth = 0;	// Uso por defecto (lo define control del LLI)
-	GPDMACfg.TransferType = GPDMA_TRANSFERTYPE_M2P;
-	GPDMACfg.SrcConn = 0;
-	GPDMACfg.DstConn = GPDMA_CONN_DAC;
-	GPDMACfg.DMALLI = (uint32_t)&LLI1;
-	GPDMA_Setup(&GPDMACfg);
-}
-
-void generateTone(uint16_t frec_Hz,uint32_t ms){ 
+void generateTone(uint16_t frec_Hz,uint32_t ms){
 	configDMA_DAC_Channel();	// Configura, no inicia/habilita DMA
 
 	// Ajusta el parámetro de timeout del DAC para frecuencia y cantidad de muestras
@@ -93,69 +121,18 @@ void generateTone(uint16_t frec_Hz,uint32_t ms){
 
 	// Habilita transferencia por DMA
 	GPDMA_ChannelCmd(0, ENABLE);
-	LED_set(0,0,1);
+	LED_set(1,0,0);
 
-	delayTIM2(ms);
-
-	LED_set(0,0,0);
-
-	// Detiene transferencia por DMA
-	GPDMA_ChannelCmd(0, DISABLE);
+	TIM1_init(ms);		// Configura TIM1 para interrumpir en "ms"
 }
 
-/**
- * @brief Retardo bloqueante basado en timer 2.
- *
- * Ejecuta delay_flag en espera activa; la bandera se limpia por interrupción del timer.
- * 
- * @param ms Milisegundos a esperar
- */
-void delayTIM2(uint32_t ms){
-	delay_flag = 1;
-	TIM2_init(ms);	// Configura y arranca el timer
-
-	while(delay_flag);	// Espera hasta que la ISR limpie la bandera
-
-	// Limpieza al concluir delay
-	TIM_Cmd(LPC_TIM2, DISABLE);
-	TIM_ResetCounter(LPC_TIM2);
-	TIM_DeInit(LPC_TIM2);
-}
-
-/**
- * @brief Configuración detallada de TIM2 para que interrumpa en "ms" ms.
- *
- * @param ms Tiempo en ms al cual se generará la interrupción (match)
- */
-void TIM2_init(uint32_t ms){
-	TIM_TIMERCFG_Type cfgTimerMode;
-	TIM_MATCHCFG_Type cfgTimerMatch;
-
-	cfgTimerMode.PrescaleOption = TIM_PRESCALE_USVAL;	// Unidad: us
-	cfgTimerMode.PrescaleValue = 1000;					// 1000 us = 1 ms
-
-	cfgTimerMatch.MatchChannel = 0;					// Usar canal MR0
-	cfgTimerMatch.IntOnMatch = ENABLE;					// Habilita interrupción al match
-	cfgTimerMatch.StopOnMatch = DISABLE;				// No detener el timer al match
-	cfgTimerMatch.ResetOnMatch = DISABLE;				// No reiniciar el timer al match
-	cfgTimerMatch.ExtMatchOutputType = TIM_EXTMATCH_NOTHING; // Ninguna salida extra
-	cfgTimerMatch.MatchValue = ms - 1;					// Valor de comparación: ms ciclos
-
-	TIM_Init(LPC_TIM2, TIM_TIMER_MODE, &cfgTimerMode);
-	TIM_ConfigMatch(LPC_TIM2, &cfgTimerMatch);
-	TIM_Cmd(LPC_TIM2, ENABLE);							// Arranca el timer
-
-	NVIC_EnableIRQ(TIMER2_IRQn);						// Habilita IRQ en NVIC
-}
-
-/**
- * @brief Rutina de Interrupción para TIMER2.
- * 
- * Limpia flag de delay cuando ocurre el match en MR0, permitiendo continuar el flujo bloqueante.
- */
-void TIMER2_IRQHandler(){
-	if(TIM_GetIntStatus(LPC_TIM2, TIM_MR0_INT) == SET){
-		delay_flag = 0;							// Libera espere activa en delayTIM2
-		TIM_ClearIntPending(LPC_TIM2, TIM_MR0_INT);// Limpia el flag de interrupción
+void TIMER1_IRQHandler(){
+	if(TIM_GetIntStatus(LPC_TIM1, TIM_MR0_INT) == SET){
+		LED_set(0,0,0);
+		// Detiene transferencia por DMA
+		GPDMA_ChannelCmd(0, DISABLE);
+		DAC_SetDMATimeOut(LPC_DAC, 0);
+		TIM_Cmd(LPC_TIM1, DISABLE);
+		TIM_ClearIntPending(LPC_TIM1, TIM_MR0_INT);// Limpia el flag de interrupción
 	}
 }

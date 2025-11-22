@@ -6,7 +6,7 @@ typedef enum {
     ST_WAIT_ID,       // Esperando llegada del ID
     ST_MENU,          // Menú cuando llegó un ID
     ST_SAVED,         // Dato guardado, volver a esperar otro ID
-    ST_SEND
+    ST_SEND           // Enviando dato
 } system_state_t;
 
 extern system_state_t state;

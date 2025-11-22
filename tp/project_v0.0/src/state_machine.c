@@ -1,8 +1,11 @@
 #include "state_machine.h"
+#include "lpc17xx_adc.h"
 
 #include "adc.h"
 #include "buttons.h"
+#include "dac.h"
 #include "id_reader.h"
+#include "serial.h"
 #include "storage.h"
 #include "ui.h"
 #include "utils.h"
@@ -10,39 +13,35 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-/** Esto includes estan en el .c ya que NO son necesarios para las
- *  declaraciones publicas. Solo se necesitan para la implementación */
+/* Esto includes estan en el .c ya que NO son necesarios para las
+ * declaraciones publicas. Solo se necesitan para la implementación */
 
 // External variables
 extern volatile uint8_t action;  // Button action from ISR
 extern uint16_t kilos;           // Weight in kg from ADC
 
-// Storage root node (global)
-static Nodo* storage_root = NULL;
-
 // Current ID being processed
 static uint64_t current_id = 0;
-const char* id_str;
+char id_str[15];
 // Total count of saved registers
 static uint32_t guardados = 0;
-const char* guardados_str;
+char guardados_str[4];
 
 // Menu variables (these should ideally be in a separate module, but for now we'll manage them here)
 static uint8_t cursorIndex = 0;
 static uint8_t itemSelection[3] = {0, 0, 0};
 
-// Menu options (matching the structure from tp.c)
+// Menu options
 const char* itemNames[4] = {
-    "Raza   ",
-    "Categ  ",
-    "Origen ",
-    "Peso   "
+    "Raza  ",
+    "Categ ",
+    "Origen",
+    "Peso  "
 };
 
 const char* options0[] = {"Angus", "Hereford", "Holando", "Brangus", "Braford", "Shorthorn", "Charolais"};
 const char* options1[] = {"Ternero/a", "Novillo", "Vaquillona", "Vaca", "Toro"};
-const char* options2[] = {"Los Cardales", "La Soñada", "El Algarrobo", "La Tranquera"};
+const char* options2[] = {"Los Cardales", "Los Medanos", "El Algarrobo", "La Tranquera"};
 
 const char** itemOptions[3] = {options0, options1, options2};
 const uint8_t itemOptionsCount[3] = {
@@ -69,6 +68,47 @@ static uint8_t save_and_send = 0;
 #define MENU_UPDATE_MS 200
 
 /* Private Functions ---------------------------------------------------------- */
+
+static void export_registro_csv(const Registro* r) {
+    char buffer[20];
+
+    // ID (uint64)
+    utils_uitoa(r->id, buffer, 10);
+    serial_send_string(buffer);
+    serial_send_string(",");
+
+    // Raza → string desde options0[]
+    serial_send_string(options0[r->raza]);
+    serial_send_string(",");
+
+    // Categoría → string desde options1[]
+    serial_send_string(options1[r->categoria]);
+    serial_send_string(",");
+
+    // Origen → string desde options2[]
+    serial_send_string(options2[r->origen]);
+    serial_send_string(",");
+
+    // Peso (uint16)
+    utils_uitoa(r->pesoKg, buffer, 10);
+    serial_send_string(buffer);
+
+    // Fin de línea
+    serial_send_string("\r\n");
+}
+
+
+static void exportar_todos_los_registros(void) {
+    uint16_t count = guardados;
+
+    for (uint16_t i = 0; i < count; i++) {
+        Registro* r = buscarRegistroIndex(i);
+        if (r != NULL) {
+            export_registro_csv(r);
+        }
+    }
+}
+
 
 /**
 * @brief Displays the menu screen
@@ -133,11 +173,11 @@ static void handleMenuNavigation(void) {
     switch (action) {
         case 1: // UP
             if (cursorIndex > 0) cursorIndex--;
-            else cursorIndex = 3;
+            else cursorIndex = 2;
             break;
             
         case 2: // DOWN
-            if (cursorIndex < 3) cursorIndex++;
+            if (cursorIndex < 2) cursorIndex++;
             else cursorIndex = 0;
             break;
             
@@ -196,14 +236,18 @@ void changeState(system_state_t NewState) {
 * This function is called continuously from main loop
 */
 void stateMachine() {
-    switch (state) {
+    switch (estado) {
         case ST_BOOT:
-            if (state_entry) {
+        	static uint32_t boot_delay = 0;
+            if (state_entry == 1) {
+				boot_delay = ticksMs + BOOT_DELAY_MS;
                 ui_showBootScreen();
                 state_entry = 0;
             }
-            delayTIM2(BOOT_DELAY_MS);
-            changeState(ST_WAIT_ID);            
+//            delayTIM2(BOOT_DELAY_MS);
+            if ((int32_t)(ticksMs - boot_delay) >= 0) {
+				 changeState(ST_WAIT_ID);
+			}
             break;
             
         case ST_WAIT_ID:
@@ -211,32 +255,23 @@ void stateMachine() {
                 ui_showWaitIdScreen();
                 state_entry = 0;
             }
-            // ADD: Check if SEND button was pressed (action == 5)
-            // Check if ID button was pressed (action == 6)
-            while (!(action == 5 || action == 6)) {};
-            if (action == 6) {
+            // ADD: Check if SEND button was pressed (action == 6)
+            // Check if ID button was pressed (action == 7)
+            while (!(action == 6 || action == 7)) {};
+            if (action == 7) {
                 // Read ID
                 current_id = id_generate();
                 action = 0;  // Clear action
                 
-                // // Check if ID already exists in storage
-                // Nodo* existing = buscarNodo(storage_root, current_id);
-                // // If it does, load it into menu
-                // if (existing != NULL) {
-                //     // Load existing data into menu
-                //     itemSelection[0] = existing->data.raza;
-                //     itemSelection[1] = existing->data.categoria;
-                //     itemSelection[2] = existing->data.origen;
-                // }
-                
                 utils_uitoa(current_id, id_str, 10);
-                // Show read ID screen
                 ui_showReadIDScreen(id_str);
-                delayTIM2(ID_DELAY_MS);
-                // Transition to menu state
+
+                generateTone(440, 1000);
+
+                delayTIM2(ID_DELAY_MS);	// Funciona!!!
                 changeState(ST_MENU);
             }
-            else if (action == 5) {
+            else if (action == 6) {
                 action = 0;  // Clear action
                 changeState(ST_SEND);
             }
@@ -244,16 +279,17 @@ void stateMachine() {
             
         case ST_MENU:
             static uint32_t next_update = 0;
-            next_update = ticksMs + MENU_UPDATE_MS;
             if (state_entry) {
                 showMenuScreen();
                 state_entry = 0;
+				next_update = ticksMs + MENU_UPDATE_MS;
             }
             
-            // Handle menu navigation
             handleMenuNavigation();
             
-            if ((int32_t)(ticksMs - next_update) >= 0) {  // Rough periodic update
+            if ((int32_t)(ticksMs - next_update) >= 0) {
+            	uint16_t adcValue = ADC_ChannelGetData(LPC_ADC, ADC_CHANNEL_0);
+            	kilos = (adcValue * 999) / 4095;
                 showMenuScreen();
                 next_update = ticksMs + MENU_UPDATE_MS;
             }
@@ -263,31 +299,23 @@ void stateMachine() {
             if (state_entry) {
                 state_entry = 0;
                 
-                // // Save current menu data to the storage tree
-                // Registro r;
-                // r.id = current_id;
-                // r.raza = itemSelection[0];
-                // r.categoria = itemSelection[1];
-                // r.origen = itemSelection[2];
-                // r.pesoKg = kilos;  // Save the weight read by ADC
+                storage_guardarDato(current_id, itemSelection[0],
+                		itemSelection[1], itemSelection[2], kilos);
                 
-                // storage_save(&storage_root, &r);
-
                 cursorIndex = 0;
                 // itemSelection[0] = 0;
                 // itemSelection[1] = 0;
                 // itemSelection[2] = 0;
                 guardados++;
-                ui_showSavedScreen(current_id);
+                ui_showSavedScreen(id_str);
             }
             
             delayTIM2(SAVED_DELAY_MS);
             
-            if (save_and_send) {
-                save_and_send = 0;  // Clear the flag
+            if (save_and_send == 1) {
+                save_and_send = 0;
                 changeState(ST_SEND);
             } else {
-                // Transition back to wait ID state
                 changeState(ST_WAIT_ID);
             }
             break;
@@ -298,30 +326,14 @@ void stateMachine() {
                 if(guardados > 0){
                     utils_uitoa(guardados, guardados_str, 10);
                     ui_showSendScreen(guardados_str);
+                    exportar_todos_los_registros();
                 } else {
                     ui_showNotSendScreen();
                 }
 
-                // // Example: Send the current record via serial (UART)
-                // Nodo* toSend = storage_find(&storage_root, current_id);
-                // if (toSend != NULL) {
-                //     // Prepare and send a formatted string with ID and animal data
-                //     char buf[128];
-                //     snprintf(buf, sizeof(buf),
-                //         "ID:%lu, Raza:%s, Categ:%s, Origen:%s, Peso:%u\r\n",
-                //         toSend->data.id,
-                //         options0[toSend->data.raza],
-                //         options1[toSend->data.categoria],
-                //         options2[toSend->data.origen],
-                //         toSend->data.pesoKg
-                //     );
-                //     serial_send_string(buf);
-                // } else {
-                //     serial_send_string("No record to send\r\n");
-                // }
             }
-            // Delay before returning to wait state
             delayTIM2(SEND_DELAY_MS);
+            changeState(ST_WAIT_ID);
             break;
     }
 }

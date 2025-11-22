@@ -1,53 +1,43 @@
 #include "storage.h"
-#include <stdlib.h>
+#include "utils.h"
+#include <string.h>
 
-/**
- * @brief Initializes the storage module
- */
+#define STORAGE_MAX    1200
+
+static Registro registros[STORAGE_MAX];
+static uint16_t registrosCount = 0;
+
 void storage_init(void) {
-    // Storage initialization (if needed in the future)
-    // For now, this is a placeholder
+    registrosCount = 0;
 }
 
-// ---- Crear un nuevo nodo ----
-Nodo* crearNodo(Registro r) {
-    Nodo* nuevo = (Nodo*) malloc(sizeof(Nodo));
-    if (!nuevo) return NULL;
-    nuevo->data = r;
-    nuevo->izq = NULL;
-    nuevo->der = NULL;
-    return nuevo;
+static void insertarRegistro(Registro r) {
+    if (registrosCount >= STORAGE_MAX)
+        return;
+
+    registros[registrosCount++] = r;
 }
 
-// ---- Insertar nuevo registro en el árbol ----
-// Si el ID ya existe, actualiza los datos.
-Nodo* insertarNodo(Nodo* raiz, Registro r) {
-    if (raiz == NULL) return crearNodo(r);
-
-    if (r.id < raiz->data.id)
-        raiz->izq = insertarNodo(raiz->izq, r);
-    else if (r.id > raiz->data.id)
-        raiz->der = insertarNodo(raiz->der, r);
-    else
-        raiz->data = r;  // Si ya existe, se actualizan los datos
-
-    return raiz;
+Registro* buscarRegistro(uint64_t id) {
+    for (uint16_t i = 0; i < registrosCount; i++) {
+        if (registros[i].id == id)
+            return (Registro*)&registros[i];
+    }
+    return NULL;
 }
 
-// ---- Buscar registro por ID ----
-Nodo* buscarNodo(Nodo* raiz, uint32_t id) {
-    if (raiz == NULL) return NULL;
-    if (id == raiz->data.id) return raiz;
-    if (id < raiz->data.id) return buscarNodo(raiz->izq, id);
-    return buscarNodo(raiz->der, id);
+Registro* buscarRegistroIndex(uint16_t ind) {
+	return (Registro*)&registros[ind];
 }
 
-// ---- Recorrer árbol (por ejemplo, para exportar por USB) ----
-void recorrerInOrden(Nodo* raiz) {
-    if (raiz == NULL) return;
-    recorrerInOrden(raiz->izq);
-    // printf("ID: %lu | Tipo: %d | Estado: %d | Cat: %d | Peso: %d kg\n",
-    //        raiz->data.id, raiz->data.tipo, raiz->data.estado,
-    //        raiz->data.categoria, raiz->data.pesoKg);
-    recorrerInOrden(raiz->der);
+/* Guarda un nuevo dato */
+void storage_guardarDato(uint64_t id, uint8_t raza, uint8_t categoria, uint8_t origen, uint16_t pesoKg) {
+    Registro r;
+    r.id = id;
+    r.raza = raza;
+    r.categoria = categoria;
+    r.origen = origen;
+    r.pesoKg = pesoKg;
+
+    insertarRegistro(r);
 }

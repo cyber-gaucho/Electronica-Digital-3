@@ -22,7 +22,7 @@ static void TIM2_init(uint32_t ms){
 
 	cfgTimerMatch.MatchChannel = 0;					// Usar MR0
 	cfgTimerMatch.IntOnMatch = ENABLE;				// Habilita interrupción
-	cfgTimerMatch.StopOnMatch = ENABLE;				// Detener
+	cfgTimerMatch.StopOnMatch = DISABLE;				// Detener
 	cfgTimerMatch.ResetOnMatch = ENABLE;		    // Reiniciar
 	cfgTimerMatch.ExtMatchOutputType = TIM_EXTMATCH_NOTHING;
     cfgTimerMatch.MatchValue = (ms == 0) ? 1 : ms;	        // evita underflow
@@ -73,7 +73,7 @@ static void LED_init(void){
 
 void utils_init(void){
 	LED_init();
-	ST_init(1);
+	ST_init(10);
 }
 
 void LED_set(uint8_t r, uint8_t g, uint8_t b){
@@ -100,21 +100,21 @@ void LED_set(uint8_t r, uint8_t g, uint8_t b){
 	TIM_DeInit(LPC_TIM2);
 }
 
-char *utils_uitoa(uint64_t value, char *vstring, unsigned int base) {
+char *utils_uitoa(uint64_t value, char *result, unsigned int base) {
     static const char digits[] = "0123456789ABCDEF";
     char buffer[65];     // suficiente para base 2 de 64 bits + '\0'
     int pos = 0;
 
     if (base < 2 || base > 16) {
-        vstring[0] = '\0';
-        return vstring;
+    	result[0] = '\0';
+        return result;
     }
 
     // Caso especial: 0
     if (value == 0) {
-        vstring[0] = '0';
-        vstring[1] = '\0';
-        return vstring;
+    	result[0] = '0';
+        result[1] = '\0';
+        return result;
     }
 
     // Ir obteniendo dígitos en orden inverso
@@ -125,12 +125,12 @@ char *utils_uitoa(uint64_t value, char *vstring, unsigned int base) {
     }
 
     // Invertir al copiar en vstring
-    for (int i = 0; i < pos; i++) {
-        vstring[i] = buffer[pos - 1 - i];
+    for (uint8_t i = 0; i < pos; i++) {
+    	result[i] = buffer[pos - 1 - i];
     }
-    vstring[pos] = '\0';
+    result[pos] = '\0';
 
-    return vstring;
+    return result;
 }
 
 /**
@@ -145,7 +145,9 @@ void TIMER2_IRQHandler(){
 	}
 }
 
-void ST_IRQHandler(void){
-	SYSTICK_ClearIntPending();
-	ticksMs++;
+void SysTick_Handler(void){
+	SYSTICK_ClearCounterFlag();
+	ticksMs+=10;
 }
+
+/* End of Public Functions ----------------------------------------------------- */

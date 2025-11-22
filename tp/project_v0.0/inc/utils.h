@@ -34,9 +34,6 @@ void LED_set(uint8_t r, uint8_t g, uint8_t b);
  */
  void delayTIM2(uint32_t ms);
 
- /**
-  * 
-  */
 char *utils_uitoa(int value, char *result, int base);
 
 #endif
