@@ -1,8 +1,6 @@
 /**
  * @file main.c
  * @brief Archivo principal del proyecto
- * @author Garcia Lautaro M
- * @author Renaudo G Valentino
  * @version 0.0.1
  * @copyright MIT License
  * @note Este archivo es el punto de entrada del proyecto
@@ -11,12 +9,13 @@
  * TODO:
  *  Revisar funciones storage
  *  Revisar funciones de save and send
- *  Mover ReadId de st_mch a id_reader.h/.c
- *  Agregar uitoa() a utils
  *  Agegar DAC con DMA
- *  DONE:
+ * DONE:
  *  Mover actualización de display a ui.c 
  *  Realizar delay por timer 2 con INT, Reset y Stop ENABLED
+ *  Mover ReadId de st_mch a id_reader.h/.c
+ *  Agregar uitoa() a utils
+ *  Agregar delay no bloqueante en menu
  */
 
 #include "lpc17xx.h"
@@ -35,24 +34,28 @@
 #include "ui.h"
 #include "utils.h"
 
-uint16_t kilos;
-system_state_t state;
-volatile uint8_t action; // Ver
+#define ID_PREFIX   123 // Prefix for ID generation
+#define ID_START    0
+
+volatile uint32_t ticksMs = 0;
+uint16_t kilos = 0;
+system_state_t state = ST_BOOT;
+volatile uint8_t action = 0; // Ver
 
 
 int main(void) {
 
     // Inicialización general
     SystemInit();
-
+    
     // Inicialización de módulos
     ui_init();
     buttons_init();       // Usa interrupciones (GPIOInt)
     adc_init();
-    // dac_init();
+    // dac_init();  // revisar electrónica
     serial_init();
-    // rfid_init();
-    storage_init();
+    id_init(ID_PREFIX, ID_START);
+    // storage_init(); // placeholder
 
     // Estado inicial
     state = ST_BOOT;

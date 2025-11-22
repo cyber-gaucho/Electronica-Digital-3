@@ -1,8 +1,6 @@
 #ifndef STATE_MACHINE
 #define STATE_MACHINE
 
-
-
 typedef enum {
     ST_BOOT,          // Pantalla inicial
     ST_WAIT_ID,       // Esperando llegada del ID

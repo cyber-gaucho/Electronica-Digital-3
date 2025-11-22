@@ -2,12 +2,14 @@
 
 #include "adc.h"
 #include "buttons.h"
+#include "id_reader.h"
 #include "storage.h"
 #include "ui.h"
 #include "utils.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
 
 /** Esto includes estan en el .c ya que NO son necesarios para las
  *  declaraciones publicas. Solo se necesitan para la implementación */
@@ -20,9 +22,11 @@ extern uint16_t kilos;           // Weight in kg from ADC
 static Nodo* storage_root = NULL;
 
 // Current ID being processed
-static uint32_t current_id = 0;
+static uint64_t current_id = 0;
+const char* id_str;
 // Total count of saved registers
 static uint32_t guardados = 0;
+const char* guardados_str;
 
 // Menu variables (these should ideally be in a separate module, but for now we'll manage them here)
 static uint8_t cursorIndex = 0;
@@ -53,12 +57,16 @@ static uint8_t state_entry = 1;
 // Flag to indicate save and send operation
 static uint8_t save_and_send = 0;
 
-// Boot screen delay counter
-#define BOOT_DELAY_MS 2000  // 2 seconds boot screen
-// Saved screen delay counter
-#define SAVED_DELAY_MS 2000  // 2 seconds saved confirmation
-// Saved screen delay counter
+// Boot screen delay time
+#define BOOT_DELAY_MS 2000
+// Saved screen delay time
+#define SAVED_DELAY_MS 2000
+// Send screen delay time
 #define SEND_DELAY_MS 2000
+// ID screen delay time
+#define ID_DELAY_MS 2000
+// Menu update time
+#define MENU_UPDATE_MS 200
 
 /* Private Functions ---------------------------------------------------------- */
 
@@ -153,53 +161,16 @@ static void handleMenuNavigation(void) {
             break;
             
         case 5: // SAVE
-        // Save the record
-            {
-            Registro reg;
-            reg.id = current_id;
-            reg.tipo = itemSelection[0];      // Sexo
-            reg.estado = itemSelection[1];    // Color
-            reg.categoria = itemSelection[2]; // Categ
-            reg.pesoKg = (uint16_t)kilos;
-            
-            // Insert into storage tree
-            storage_root = insertarNodo(storage_root, reg);
-            
-            // Reset menu selections
-            cursorIndex = 0;
-            itemSelection[0] = 0;
-            itemSelection[1] = 0;
-            itemSelection[2] = 0;
-                
-            // Transition to saved state
+            // // Transition to saved state
             changeState(ST_SAVED);
-            }
             break;
             
-        case 6: // SEND (optional - could export data)
+        case 6: // SEND
             // Set flag to save and then send
-            save_and_send = 1;
             // Save the record first
-            {
-            Registro reg;
-            reg.id = current_id;
-            reg.tipo = itemSelection[0];      // Sexo
-            reg.estado = itemSelection[1];    // Color
-            reg.categoria = itemSelection[2]; // Categ
-            reg.pesoKg = (int)kilos;
-            
-            // Insert into storage tree
-            storage_root = insertarNodo(storage_root, reg);
-            
-            // Reset menu selections
-            cursorIndex = 0;
-            itemSelection[0] = 0;
-            itemSelection[1] = 0;
-            itemSelection[2] = 0;
-                
+            save_and_send = 1;
             // Transition to saved state (which will then go to send state)
             changeState(ST_SAVED);
-            }
             break;
             
         case 7: // ID (ignore in menu state)
@@ -207,17 +178,6 @@ static void handleMenuNavigation(void) {
         }
         
     action = 0;  // Clear action
-}
-
-/**
-* @brief Simulates reading an ID (for now, just generates a test ID)
-* In the future, this should call id_reader functions
-*/
-static uint32_t readId(void) {
-    // For now, generate a simple test ID
-    // In real implementation, this would call id_reader functions
-    static uint32_t test_id_counter = 1;
-    return test_id_counter++;
 }
 
 /* End of Private Functions --------------------------------------------------- */
@@ -248,37 +208,43 @@ void stateMachine() {
             
         case ST_WAIT_ID:
             if (state_entry) {
-                showWaitIdScreen();
+                ui_showWaitIdScreen();
                 state_entry = 0;
             }
-            // ADD: Check if SEND button was pressed (action == 6)
-            // Check if ID button was pressed (action == 7)
-            if (action == 7) {
+            // ADD: Check if SEND button was pressed (action == 5)
+            // Check if ID button was pressed (action == 6)
+            while (!(action == 5 || action == 6)) {};
+            if (action == 6) {
                 // Read ID
-                current_id = readId();
+                current_id = id_generate();
                 action = 0;  // Clear action
                 
-                // Check if ID already exists in storage
-                Nodo* existing = buscarNodo(storage_root, current_id);
-                if (existing != NULL) {
-                    // Load existing data into menu
-                    itemSelection[0] = existing->data.raza;
-                    itemSelection[1] = existing->data.categoria;
-                    itemSelection[2] = existing->data.origen;
-                } else {
-                    // Reset menu selections for new ID
-                    cursorIndex = 0;
-                    itemSelection[0] = 0;
-                    itemSelection[1] = 0;
-                    itemSelection[2] = 0;
-                }
+                // // Check if ID already exists in storage
+                // Nodo* existing = buscarNodo(storage_root, current_id);
+                // // If it does, load it into menu
+                // if (existing != NULL) {
+                //     // Load existing data into menu
+                //     itemSelection[0] = existing->data.raza;
+                //     itemSelection[1] = existing->data.categoria;
+                //     itemSelection[2] = existing->data.origen;
+                // }
                 
+                utils_uitoa(current_id, id_str, 10);
+                // Show read ID screen
+                ui_showReadIDScreen(id_str);
+                delayTIM2(ID_DELAY_MS);
                 // Transition to menu state
                 changeState(ST_MENU);
+            }
+            else if (action == 5) {
+                action = 0;  // Clear action
+                changeState(ST_SEND);
             }
             break;
             
         case ST_MENU:
+            static uint32_t next_update = 0;
+            next_update = ticksMs + MENU_UPDATE_MS;
             if (state_entry) {
                 showMenuScreen();
                 state_entry = 0;
@@ -287,33 +253,36 @@ void stateMachine() {
             // Handle menu navigation
             handleMenuNavigation();
             
-            // Update menu display periodically
-            // (In a real implementation, use a timer to avoid constant updates)
-            static uint32_t menu_update_counter = 0;
-            menu_update_counter++;
-            if (menu_update_counter > 10000) {  // Rough periodic update
+            if ((int32_t)(ticksMs - next_update) >= 0) {  // Rough periodic update
                 showMenuScreen();
-                menu_update_counter = 0;
+                next_update = ticksMs + MENU_UPDATE_MS;
             }
             break;
             
         case ST_SAVED:
             if (state_entry) {
-                ui_showSavedScreen(current_id);
                 state_entry = 0;
+                
+                // // Save current menu data to the storage tree
+                // Registro r;
+                // r.id = current_id;
+                // r.raza = itemSelection[0];
+                // r.categoria = itemSelection[1];
+                // r.origen = itemSelection[2];
+                // r.pesoKg = kilos;  // Save the weight read by ADC
+                
+                // storage_save(&storage_root, &r);
 
-                // Save current menu data to the storage tree
-                Registro r;
-                r.id = current_id;
-                r.raza = itemSelection[0];
-                r.categoria = itemSelection[1];
-                r.origen = itemSelection[2];
-                r.pesoKg = kilos;  // Save the weight read by ADC
-
-                storage_save(&storage_root, &r);
+                cursorIndex = 0;
+                // itemSelection[0] = 0;
+                // itemSelection[1] = 0;
+                // itemSelection[2] = 0;
+                guardados++;
+                ui_showSavedScreen(current_id);
             }
             
             delayTIM2(SAVED_DELAY_MS);
+            
             if (save_and_send) {
                 save_and_send = 0;  // Clear the flag
                 changeState(ST_SEND);
@@ -322,14 +291,13 @@ void stateMachine() {
                 changeState(ST_WAIT_ID);
             }
             break;
+
         case ST_SEND:
             if (state_entry) {
                 state_entry = 0;
                 if(guardados > 0){
-                    const char* guardados_str;
-                    uitoa(guardados, guardados_str, 10);
+                    utils_uitoa(guardados, guardados_str, 10);
                     ui_showSendScreen(guardados_str);
-
                 } else {
                     ui_showNotSendScreen();
                 }

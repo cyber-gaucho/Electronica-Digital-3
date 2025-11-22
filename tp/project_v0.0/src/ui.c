@@ -48,21 +48,21 @@
         lcd_print("Presione ID btn");
     }
 
-    void ui_showSavedScreen(uint32_t id) {
+    void ui_showReadIdScreen(char* id) {
+        lcd_clear();
+        lcd_setCursor(5, 1);
+        lcd_print("ID leido:");
+        lcd_setCursor(3, 2);
+        lcd_print(id);
+    }
+
+    void ui_showSavedScreen(char* id) {
         lcd_clear();
         lcd_setCursor(5, 1);
         lcd_print("Guardado!");
-        lcd_setCursor(3, 2);
+        lcd_setCursor(0, 2);
         lcd_print("ID: ");
-        // Display ID (simplified - just show first few digits)
-        char id_str[12];
-        uint8_t pos = 0;
-        for (int i = 0; i < 8 && pos < 11; i++) {
-            uint8_t digit = (id >> (28 - i*4)) & 0xF;
-            id_str[pos++] = (digit < 10) ? ('0' + digit) : ('A' + digit - 10);
-        }
-        id_str[pos] = '\0';
-        lcd_print(id_str);
+        lcd_print(id);
     }
 
     void ui_showSendScreen(const char *guardados_str) {
@@ -71,4 +71,14 @@
         lcd_print("Enviando ");
         lcd_print(guardados_str);
         lcd_print(" datos");
+    }
+
+
+
+    void ui_showNotSendScreen(){
+        lcd_clear();
+        lcd_setCursor(5, 1);
+        lcd_print("SEND FAILED");
+        lcd_setCursor(4, 2);
+        lcd_print("No hay datos");
     }

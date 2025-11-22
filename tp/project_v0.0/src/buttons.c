@@ -1,6 +1,7 @@
 #include "buttons.h"
 
-volatile uint8_t action = 0;  // Button action from ISR
+#include "lpc17xx_pinsel.h"
+#include "lpc17xx_gpio.h"
 
 void buttons_init(){
     PINSEL_CFG_Type cfgButtons = {0};
@@ -22,55 +23,8 @@ void buttons_init(){
                     (1 << BTN_ID_PIN)),1);
 
     LPC_GPIOINT->IO2IntClr = 0xFFFF;
-}
 
-void buttons_command(FunctionalState NewState){
-    if(NewState == ENABLE){
-        NVIC_EnableIRQ(EINT3_IRQn);
-    }else{
-        NVIC_DisableIRQ(EINT3_IRQn);
-    }
-}
-
-
-void buttons_handle_action(void){
-    // static uint32_t lastActionTime = 0;
-    if (action == 0) return;
-
-    // if ((SysTick->VAL - lastActionTime) < 150) return;
-    // lastActionTime = SysTick->VAL;
-
-    switch (action) {
-        case 1: // UP
-            lcd_clear();     // Limpia la pantalla
-            lcd_setCursor(5, 1); lcd_print("UP BUTTON");
-            break;
-        case 2: // DOWN
-            lcd_clear();     // Limpia la pantalla
-            lcd_setCursor(4, 1); lcd_print("DOWN BUTTON");
-            break;
-        case 3: // RIGHT
-            lcd_clear();     // Limpia la pantalla
-            lcd_setCursor(4, 1); lcd_print("RIGHT BUTTON");
-            break;
-        case 4: // LEFT
-            lcd_clear();     // Limpia la pantalla
-            lcd_setCursor(4, 1); lcd_print("LEFT BUTTON");
-            break;
-        case 5: // SAVE
-            lcd_clear();     // Limpia la pantalla
-            lcd_setCursor(4, 1); lcd_print("SAVE BUTTON");
-            break;
-        case 6: // SEND
-            lcd_clear();     // Limpia la pantalla
-            lcd_setCursor(4, 1); lcd_print("SEND BUTTON");
-            break;
-        case 7: // ID
-            lcd_clear();     // Limpia la pantalla
-            lcd_setCursor(4, 1); lcd_print("ID BUTTON");
-            break;
-    }
-    action = 0;
+    NVIC_EnableIRQ(EINT3_IRQn);
 }
 
 /**

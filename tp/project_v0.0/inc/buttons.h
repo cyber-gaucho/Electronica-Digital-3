@@ -1,8 +1,7 @@
 #ifndef BUTTONS_H
 #define BUTTONS_H
 
-#include "lpc17xx_pinsel.h"
-#include "lpc17xx_gpio.h"
+#include <stdint.h>
 
 #define     BTN_PORT        2
 /**
@@ -24,10 +23,8 @@
     BTN_ID_PIN      // Dejar ID ultimo en este enum
 } BTN_OPT;
 
+extern volatile uint8_t action;
+
 void buttons_init();
-
-void buttons_command(FunctionalState NewState);
-
-void buttons_handle_action();
 
 #endif /* BUTTONS_H */

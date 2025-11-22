@@ -36,11 +36,24 @@ void ui_showBootScreen(void);
 void ui_showWaitIdScreen(void);
 
 /**
+* @brief Displays the read ID screen
+*/
+void ui_showReadIDScreen(char* id);
+
+/**
 * @brief Handles menu navigation in ST_MENU state
 */
-void ui_showSavedScreen(uint32_t id);
+void ui_showSavedScreen(char* id);
 
-void ui_showSendScreen(uint32_t guardados);
+/**
+* @brief Displays the send screen
+*/
+void ui_showSendScreen(char* guardados);
+
+/**
+* @brief Displays the NOT send screen
+*/
+void ui_showNotSendScreen(void);
 
 void ui_printLine(uint8_t row, const char *text);
 void ui_update(void);

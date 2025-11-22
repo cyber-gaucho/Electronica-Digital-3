@@ -1,18 +1,19 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <stdint.h>
+
 /* LED Pin Configuration */
 #define LED_RED_PIN     22  // P0.22
 #define LED_BLUE_PIN    26  // P3.26
 #define LED_GREEN_PIN   25  // P3.25
 
+extern volatile uint32_t ticksMs;
+
 /**
- * @brief Configuración de los pines de los LEDs
- * @details Inicializa los pines de los LEDs como salidas
- * @param[in] Ninguno
- * @return None
+ * @brief Inicializa LEDs y SysTick
  */
-void LED_init(void);
+void utils_init(void);
 
 /**
  * @brief Enciende o apaga los LEDs
@@ -32,5 +33,10 @@ void LED_set(uint8_t r, uint8_t g, uint8_t b);
  * @param ms Tiempo a esperar en milisegundos.
  */
  void delayTIM2(uint32_t ms);
+
+ /**
+  * 
+  */
+char *utils_uitoa(int value, char *result, int base);
 
 #endif

@@ -3,6 +3,7 @@
 #include "lpc17xx_timer.h"
 #include "lpc17xx_pinsel.h"
 #include "lpc17xx_gpio.h"
+#include "lpc17xx_systick.h"
 
 volatile uint8_t delay_flag = 0;    // Flag para manejo de retardo por timer
 
@@ -33,11 +34,16 @@ static void TIM2_init(uint32_t ms){
 	NVIC_EnableIRQ(TIMER2_IRQn);						// Habilita IRQ en NVIC
 }
 
-/* End of Private Functions ---------------------------------------------------- */
-
-/* Public Functions ----------------------------------------------------------- */
-
-void LED_init(void){
+/**
+ * @brief Configuración detallada de SYSTICK para que interrumpa en "ms" ms.
+ */
+static void ST_init(uint32_t ms){
+	SYSTICK_InternalInit(ms);
+    SYSTICK_Cmd(ENABLE);
+    SYSTICK_IntCmd(ENABLE);
+	NVIC_SetPriority(SysTick_IRQn, 0);
+}
+static void LED_init(void){
     PINSEL_CFG_Type cfgLED = {0};
     cfgLED.Funcnum = PINSEL_FUNC_0; // GPIO
     cfgLED.Pinmode = PINSEL_PINMODE_TRISTATE;
@@ -59,6 +65,15 @@ void LED_init(void){
 
     GPIO_SetValue(0, 1<<LED_RED_PIN);
     GPIO_SetValue(3,1<<LED_BLUE_PIN|1<<LED_GREEN_PIN);
+}
+
+/* End of Private Functions ---------------------------------------------------- */
+
+/* Public Functions ----------------------------------------------------------- */
+
+void utils_init(void){
+	LED_init();
+	ST_init(1);
 }
 
 void LED_set(uint8_t r, uint8_t g, uint8_t b){
@@ -85,6 +100,39 @@ void LED_set(uint8_t r, uint8_t g, uint8_t b){
 	TIM_DeInit(LPC_TIM2);
 }
 
+char *utils_uitoa(uint64_t value, char *vstring, unsigned int base) {
+    static const char digits[] = "0123456789ABCDEF";
+    char buffer[65];     // suficiente para base 2 de 64 bits + '\0'
+    int pos = 0;
+
+    if (base < 2 || base > 16) {
+        vstring[0] = '\0';
+        return vstring;
+    }
+
+    // Caso especial: 0
+    if (value == 0) {
+        vstring[0] = '0';
+        vstring[1] = '\0';
+        return vstring;
+    }
+
+    // Ir obteniendo dígitos en orden inverso
+    while (value > 0) {
+        uint64_t digit = value % base;
+        buffer[pos++] = digits[digit];
+        value /= base;
+    }
+
+    // Invertir al copiar en vstring
+    for (int i = 0; i < pos; i++) {
+        vstring[i] = buffer[pos - 1 - i];
+    }
+    vstring[pos] = '\0';
+
+    return vstring;
+}
+
 /**
  * @brief Rutina de Interrupción para TIMER2.
  * 
@@ -95,4 +143,9 @@ void TIMER2_IRQHandler(){
 		delay_flag = 0;							// Libera espere activa en delayTIM2
 		TIM_ClearIntPending(LPC_TIM2, TIM_MR0_INT);// Limpia el flag de interrupción
 	}
+}
+
+void ST_IRQHandler(void){
+	SYSTICK_ClearIntPending();
+	ticksMs++;
 }

@@ -6,9 +6,10 @@
 #ifndef SERIAL_H
 #define SERIAL_H
 
-#include "lpc17xx_pinsel.h"
+#include "lpc_types.h"
 #include <stdint.h>
 #include <stdarg.h>
+// #include "lpc17xx_pinsel.h"
 
 #ifdef SERIAL_UART
 #define UART_PORT LPC_UART0
