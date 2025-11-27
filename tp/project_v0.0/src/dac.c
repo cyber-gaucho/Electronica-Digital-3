@@ -71,7 +71,7 @@ static void configDMA_DAC_Channel(){
 	// - Source address se incrementa, destino (DAC) fijo
 
 	LLI1.SrcAddr = (uint32_t) sine_bank;
-	LLI1.DstAddr = (uint32_t) &LPC_DAC->DACR;
+	LLI1.DstAddr = (uint32_t) &(LPC_DAC->DACR);
 	LLI1.NextLLI = (uint32_t) &LLI1;	// Circular (auto-loop)
 	LLI1.Control = SAMPLES_AMOUNT | (1<<19) | (1<<22) | (1<<26);
 

@@ -1,6 +1,7 @@
 #include "_adc.h"
 #include "lpc17xx_adc.h"
 #include "lpc17xx_pinsel.h"
+
 void adc_init(void){
     PINSEL_CFG_Type pinADC = {0};
 	pinADC.Portnum = 0;
@@ -13,4 +14,9 @@ void adc_init(void){
 	ADC_Init(LPC_ADC, ADC_RATE);                           // ADC a 200kHz
 	ADC_BurstCmd(LPC_ADC, ENABLE);                         // Enable burst mode
 	ADC_ChannelCmd(LPC_ADC, ADC_CHANNEL_0, ENABLE);
+}
+
+uint16_t adc_getkilos(void){
+	uint16_t adcValue = ADC_ChannelGetData(LPC_ADC, ADC_CHANNEL_0);
+    return (adcValue * 999) / 4095;
 }

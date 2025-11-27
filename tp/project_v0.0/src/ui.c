@@ -1,7 +1,7 @@
 #include "ui.h"
 
-#include 	"lpc17xx_i2c.h"
-#include    "LiquidCrystal_I2C_LPC.h"
+#include "lpc17xx_i2c.h"
+#include "LiquidCrystal_I2C_LPC.h"
 
     void ui_init(void){
 
@@ -27,7 +27,7 @@
     }
 
     void ui_printLine(uint8_t row, const char *text) {
-        lcd_setCursor(0, row);
+        lcd_clearRow(row);
         lcd_print(text);
     }
 
@@ -75,8 +75,6 @@
         lcd_print(guardados_str);
         lcd_print(" datos");
     }
-
-
 
     void ui_showNotSendScreen(){
         lcd_clear();

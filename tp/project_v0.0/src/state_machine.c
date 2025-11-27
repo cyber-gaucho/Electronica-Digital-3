@@ -146,10 +146,10 @@ static void showMenuScreen(void) {
                 val %= 100;
             }
             if (val >= 10 || pos > 0) {
-                kilos_str[pos++] = '0' + (val / 10);    // Carga centenas en pos
+                kilos_str[pos++] = '0' + (val / 10);    // Carga decenas en pos
                 val %= 10;
             }
-            kilos_str[pos++] = '0' + val;
+            kilos_str[pos++] = '0' + val; // Carga unidades
             kilos_str[pos++] = ' ';
             kilos_str[pos++] = 'k';
             kilos_str[pos++] = 'g';
@@ -201,7 +201,7 @@ static void handleMenuNavigation(void) {
             break;
             
         case 5: // SAVE
-            // // Transition to saved state
+            // Transition to saved state
             changeState(ST_SAVED);
             break;
             
@@ -288,8 +288,7 @@ void stateMachine() {
             handleMenuNavigation();
             
             if ((int32_t)(ticksMs - next_update) >= 0) {
-            	uint16_t adcValue = ADC_ChannelGetData(LPC_ADC, ADC_CHANNEL_0);
-            	kilos = (adcValue * 999) / 4095;
+            	kilos = adc_getkilos();
                 showMenuScreen();
                 next_update = ticksMs + MENU_UPDATE_MS;
             }

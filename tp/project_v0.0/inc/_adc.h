@@ -14,4 +14,15 @@
  **********************************************************************/
 void adc_init(void);
 
-#endif
+/*********************************************************************//**
+ * @brief        Convierte ADC value a kilos
+ * @details      This function takes the ADC value from channel 0 and
+ *               converts it to kilos. It takes the ADC value and
+ *               multiplies it by 999, then divides the result by
+ *               4095. The result is returned as a 16-bit
+ *               unsigned integer.
+ * @return       Kilos value [0 - 999]
+ **********************************************************************/
+uint16_t adc_getkilos(void);
+
+#endif /* _ADC_H */
