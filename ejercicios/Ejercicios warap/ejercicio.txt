@@ -1,0 +1,71 @@
+#include "LPC17xx_adc.h"
+#include "LPC17xx_timer.h"
+
+void configPin();
+void configADC();
+void configTIM();
+
+int main(){
+	configPin();
+	configADC();
+	configTIM();
+	 while(1){
+
+	 }
+	 return 0;
+}
+
+void configPIN(){
+	// ASUMO VALORES POR DEFECTO
+	LPC_GPIO0 -> FIODIR |= (1 << 22);
+	LPC_GPIO3 -> FIODIR |= (1 << 25);
+}
+
+void configADC(){
+	ADC_Init(200000);
+	ADC_PinConfig(ADC_CHANNEL_0);
+	ADC_StartCmd(ADC_START_ON_MAT01);;
+	ADC_ChannelCmd(ADC_CHANNEL_0, ENABLE);
+	ADC_IntConfig(ADC_CHANNEL_0, ENABLE);
+	NVIC_EnableIRQ(ADC_IRQn);
+}
+
+void configTIM0(){
+	TIM_TIMERCFG_Type TIMCfg = {0};
+	TIM_MATCHCFG_Type MATCfg = {0};
+
+	TIMCfg.prescaleOption = TIM_USVAL;
+	TIMCfg.prescaleValue = 1000; // cuenta cada 1mS
+	MATCfg.matchChannel = TIM_MATCH_0;
+	MATCfg.resetOnMatch = ENABLE;
+	MATCfg.TIM_matchValue(50); 
+
+	TIM_Init(LPC_TIM0, TIM_TIMER_MODE, &TIMCfg);
+	TIM_ConfigMatch(LPC_TIM0, &MATCfg);
+	TIM_Cmd(LPC_TIM0, ENABLE);
+}
+
+void ADC_IRQHandler(){
+	static int cont = 0;
+	if(ADC_ChannelGetData(ADC_CHANNEL_0) < 1679){
+		LPC_GPIO3 -> FIOSET |= (1 << 25);
+		LPC_GPIO3 -> FIOCLR |= (1 << 26);
+		LPC_GPIO1 -> FIOCLR |= (1 << 22);
+		cont = 0;
+	}
+	if( 1679 <= ADC_ChannelGetData(ADC_CHANNEL_0) &&  ADC_ChannelGetData(ADC_CHANNEL_0) <= 2460){
+			LPC_GPIO3 -> FIOCLR |= (1 << 25);
+			LPC_GPIO3 -> FIOSET |= (1 << 26);
+			LPC_GPIO1 -> FIOSET |= (1 << 22);
+			cont = 0;
+		}
+	if(ADC_ChannelGetData(ADC_CHANNEL_0) > 2460){
+		if(cont == 10){
+			LPC_GPIO3 -> FIOCLR |= (1 << 25);
+			LPC_GPIO3 -> FIOCLR |= (1 << 26);
+			LPC_GPIO1 -> FIOCLR |= (1 << 22);
+			}
+		cont ++;
+		}
+	NVIC_ClearPending(ADC_IRQn);
+}

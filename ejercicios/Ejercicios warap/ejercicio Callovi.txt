@@ -1,0 +1,30 @@
+Por si alguno le pinta hacerlo, tengo este ejercicio 
+/*
+ * Ejercicio integrador para LPC1769
+ *
+ * Programar el microcontrolador LPC1769 (cclk = 100 MHz) para realizar las siguientes tareas:
+ *
+ * 1. Generar una señal triangular periódica de 0 a 3.3 V en el DAC:
+ *    - La frecuencia de la señal triangular debe ser de 100 Hz.
+ *    - Utilizar el TIMER0 para generar interrupciones periódicas que actualicen el DAC.
+ *    - Configurar correctamente el pin de salida del DAC usando el driver PINSEL.
+ *
+ * 2. Digitalizar la señal triangular mediante el ADC:
+ *    - Utilizar el ADC en modo burst para muestrear la señal en el pin ADC2 (P0.25).
+ *    - Configurar el driver PINSEL para el pin de entrada analógica.
+ *    - Guardar los datos digitalizados en un buffer circular de 128 muestras.
+ *
+ * 3. Transferencia de datos mediante DMA:
+ *    - Cada vez que el buffer circular esté lleno, utilizar el hardware GPDMA para transferir las 128 muestras a otra región de memoria.
+ *    - Utilizar interrupciones para detectar el fin de la transferencia DMA.
+ *
+ * 4. Promediar y transmitir por UART:
+ *    - Cuando se complete la transferencia DMA, calcular el promedio de las muestras transferidas.
+ *    - Transmitir el valor promedio por UART0 como un número entero.
+ *
+ * Requisitos:
+ * - Comentar el código adecuadamente.
+ * - Utilizar las librerías y drivers de NXP para cada periférico.
+ * - Usar las interrupciones adecuadas para TIMER0, ADC y DMA.
+ * - Configurar correctamente los pines con PINSEL.
+ */

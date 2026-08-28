@@ -12,7 +12,7 @@
 #define SWITCH1_PIN     2       // P0.2 para Switch 1
 #define SWITCH2_PORT    0
 #define SWITCH2_PIN     3       // P0.3 para Switch 2
-
+LPC_ADC = 
 /* LED pins */
 #define LED1_PORT       0
 #define LED1_PIN        22      // P0.22 LED

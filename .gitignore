@@ -83,3 +83,7 @@ cmake-build-release/
 *.so
 *.dll
 
+# === Carpetas de Drivers ===
+common/
+/common/cmsis/CMSISv2p00_LPC17xx-TRUJILLO
+/tp/librerias/SNAKE---LPC1769-main
